@@ -804,6 +804,13 @@ async def generate_and_update_project_name(project_id: str, prompt: str):
             logger.info(f"Finished background naming task for project: {project_id} using fallback.")
             return # Exit early
 
+        # === New logic to automatically prefix ollama/ if needed ===
+        if '/' not in model_name_to_use:
+            original_model_for_log = model_name_to_use
+            model_name_to_use = f"ollama/{model_name_to_use}"
+            logger.info(f"Assuming Ollama provider for unprefixed MODEL_TO_USE ('{original_model_for_log}'). Using '{model_name_to_use}' for project naming.")
+        # === End of new logic ===
+
         # Proceed with LLM-based naming if model_name_to_use is set
         system_prompt = "You are a helpful assistant that generates extremely concise titles (2-4 words maximum) for chat threads based on the user's message. Respond with only the title, no other text or punctuation."
         user_message = f"Generate an extremely brief title (2-4 words only) for a chat thread that starts with this message: \"{prompt}\""
