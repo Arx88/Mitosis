@@ -154,6 +154,13 @@ def prepare_params(
             params["extra_headers"] = extra_headers
             logger.debug(f"Added OpenRouter site URL and app name to headers")
 
+        # Add OpenRouter API key
+        if config.OPENROUTER_API_KEY:
+            params["api_key"] = config.OPENROUTER_API_KEY
+            logger.debug("Added OpenRouter API key to params.")
+        else:
+            logger.warning("OpenRouter API key not found in config, API call may fail.")
+
     # Add Bedrock-specific parameters
     if model_name.startswith("bedrock/"):
         logger.debug(f"Preparing AWS Bedrock parameters for model: {model_name}")
