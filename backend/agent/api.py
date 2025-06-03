@@ -17,7 +17,7 @@ from services import redis
 from utils.auth_utils import get_current_user_id_from_jwt, get_user_id_from_stream_auth, verify_thread_access
 from utils.logger import logger
 from services.billing import check_billing_status, can_use_model
-from utils.config import config
+from utils.config import config, EnvMode
 from sandbox.sandbox import create_sandbox, get_or_start_sandbox
 from services.llm import make_llm_api_call
 from run_agent_background import run_agent_background, _cleanup_redis_response_list, update_agent_run_status
@@ -444,6 +444,9 @@ async def start_agent(
             
         sandbox_id = sandbox_info['id']
         sandbox = await get_or_start_sandbox(sandbox_id)
+        if not sandbox: # Add this check
+            logger.error(f"Failed to get or start sandbox for project {project_id} in local mode (Daytona not configured). Agent cannot run.")
+            raise HTTPException(status_code=500, detail="Failed to initialize sandbox for local mode (Daytona not configured). Agent cannot run.")
         logger.info(f"Successfully started sandbox {sandbox_id} for project {project_id}")
     except Exception as e:
         logger.error(f"Failed to start sandbox for project {project_id}: {str(e)}")
@@ -917,93 +920,110 @@ async def initiate_agent_with_files(
         # Trigger Background Naming Task
         asyncio.create_task(generate_and_update_project_name(project_id=project_id, prompt=prompt))
 
+        # Initialize message_content with prompt first
+        message_content = prompt
+
         # 3. Create Sandbox
         sandbox_pass = str(uuid.uuid4())
         sandbox = create_sandbox(sandbox_pass, project_id)
-        sandbox_id = sandbox.id
-        logger.info(f"Created new sandbox {sandbox_id} for project {project_id}")
 
-        # Get preview links
-        vnc_link = sandbox.get_preview_link(6080)
-        website_link = sandbox.get_preview_link(8080)
-        vnc_url = vnc_link.url if hasattr(vnc_link, 'url') else str(vnc_link).split("url='")[1].split("'")[0]
-        website_url = website_link.url if hasattr(website_link, 'url') else str(website_link).split("url='")[1].split("'")[0]
-        token = None
-        if hasattr(vnc_link, 'token'):
-            token = vnc_link.token
-        elif "token='" in str(vnc_link):
-            token = str(vnc_link).split("token='")[1].split("'")[0]
+        if sandbox: # Check if sandbox was successfully created
+            sandbox_id = sandbox.id
+            logger.info(f"Created new sandbox {sandbox_id} for project {project_id}")
 
-        # Update project with sandbox info
-        update_result = await client.table('projects').update({
-            'sandbox': {
-                'id': sandbox_id, 'pass': sandbox_pass, 'vnc_preview': vnc_url,
-                'sandbox_url': website_url, 'token': token
-            }
-        }).eq('project_id', project_id).execute()
+            # Get preview links
+            vnc_link = sandbox.get_preview_link(6080)
+            website_link = sandbox.get_preview_link(8080)
+            vnc_url = vnc_link.url if hasattr(vnc_link, 'url') else str(vnc_link).split("url='")[1].split("'")[0]
+            website_url = website_link.url if hasattr(website_link, 'url') else str(website_link).split("url='")[1].split("'")[0]
+            token = None
+            if hasattr(vnc_link, 'token'):
+                token = vnc_link.token
+            elif "token='" in str(vnc_link):
+                token = str(vnc_link).split("token='")[1].split("'")[0]
 
-        if not update_result.data:
-            logger.error(f"Failed to update project {project_id} with new sandbox {sandbox_id}")
-            raise Exception("Database update failed")
+            # Update project with sandbox info
+            update_result = await client.table('projects').update({
+                'sandbox': {
+                    'id': sandbox_id, 'pass': sandbox_pass, 'vnc_preview': vnc_url,
+                    'sandbox_url': website_url, 'token': token
+                }
+            }).eq('project_id', project_id).execute()
 
-        # 4. Upload Files to Sandbox (if any)
-        message_content = prompt
-        if files:
-            successful_uploads = []
-            failed_uploads = []
-            for file in files:
-                if file.filename:
-                    try:
-                        safe_filename = file.filename.replace('/', '_').replace('\\', '_')
-                        target_path = f"/workspace/{safe_filename}"
-                        logger.info(f"Attempting to upload {safe_filename} to {target_path} in sandbox {sandbox_id}")
-                        content = await file.read()
-                        upload_successful = False
+            if not update_result.data:
+                logger.error(f"Failed to update project {project_id} with new sandbox {sandbox_id}")
+                if config.ENV_MODE != EnvMode.LOCAL:
+                    raise Exception("Database update failed for sandbox info in non-local mode")
+                else:
+                    logger.warning("Failed to update project with sandbox info, but continuing in local mode without sandbox.")
+
+            # 4. Upload Files to Sandbox (if any)
+            if files:
+                successful_uploads = []
+                failed_uploads = []
+                for file in files:
+                    if file.filename:
                         try:
-                            if hasattr(sandbox, 'fs') and hasattr(sandbox.fs, 'upload_file'):
-                                import inspect
-                                if inspect.iscoroutinefunction(sandbox.fs.upload_file):
-                                    await sandbox.fs.upload_file(target_path, content)
-                                else:
-                                    sandbox.fs.upload_file(target_path, content)
-                                logger.debug(f"Called sandbox.fs.upload_file for {target_path}")
-                                upload_successful = True
-                            else:
-                                raise NotImplementedError("Suitable upload method not found on sandbox object.")
-                        except Exception as upload_error:
-                            logger.error(f"Error during sandbox upload call for {safe_filename}: {str(upload_error)}", exc_info=True)
-
-                        if upload_successful:
+                            safe_filename = file.filename.replace('/', '_').replace('\\', '_')
+                            target_path = f"/workspace/{safe_filename}"
+                            logger.info(f"Attempting to upload {safe_filename} to {target_path} in sandbox {sandbox_id}")
+                            content = await file.read()
+                            upload_successful = False
                             try:
-                                await asyncio.sleep(0.2)
-                                parent_dir = os.path.dirname(target_path)
-                                files_in_dir = sandbox.fs.list_files(parent_dir)
-                                file_names_in_dir = [f.name for f in files_in_dir]
-                                if safe_filename in file_names_in_dir:
-                                    successful_uploads.append(target_path)
-                                    logger.info(f"Successfully uploaded and verified file {safe_filename} to sandbox path {target_path}")
+                                if hasattr(sandbox, 'fs') and hasattr(sandbox.fs, 'upload_file'):
+                                    import inspect
+                                    if inspect.iscoroutinefunction(sandbox.fs.upload_file):
+                                        await sandbox.fs.upload_file(target_path, content)
+                                    else:
+                                        sandbox.fs.upload_file(target_path, content)
+                                    logger.debug(f"Called sandbox.fs.upload_file for {target_path}")
+                                    upload_successful = True
                                 else:
-                                    logger.error(f"Verification failed for {safe_filename}: File not found in {parent_dir} after upload attempt.")
+                                    raise NotImplementedError("Suitable upload method not found on sandbox object.")
+                            except Exception as upload_error:
+                                logger.error(f"Error during sandbox upload call for {safe_filename}: {str(upload_error)}", exc_info=True)
+
+                            if upload_successful:
+                                try:
+                                    await asyncio.sleep(0.2) # Consider if this sleep is necessary
+                                    parent_dir = os.path.dirname(target_path)
+                                    files_in_dir = sandbox.fs.list_files(parent_dir)
+                                    file_names_in_dir = [f.name for f in files_in_dir]
+                                    if safe_filename in file_names_in_dir:
+                                        successful_uploads.append(target_path)
+                                        logger.info(f"Successfully uploaded and verified file {safe_filename} to sandbox path {target_path}")
+                                    else:
+                                        logger.error(f"Verification failed for {safe_filename}: File not found in {parent_dir} after upload attempt.")
+                                        failed_uploads.append(safe_filename)
+                                except Exception as verify_error:
+                                    logger.error(f"Error verifying file {safe_filename} after upload: {str(verify_error)}", exc_info=True)
                                     failed_uploads.append(safe_filename)
-                            except Exception as verify_error:
-                                logger.error(f"Error verifying file {safe_filename} after upload: {str(verify_error)}", exc_info=True)
+                            else:
                                 failed_uploads.append(safe_filename)
-                        else:
-                            failed_uploads.append(safe_filename)
-                    except Exception as file_error:
-                        logger.error(f"Error processing file {file.filename}: {str(file_error)}", exc_info=True)
-                        failed_uploads.append(file.filename)
-                    finally:
-                        await file.close()
+                        except Exception as file_error:
+                            logger.error(f"Error processing file {file.filename}: {str(file_error)}", exc_info=True)
+                            failed_uploads.append(file.filename)
+                        finally:
+                            await file.close()
 
-            if successful_uploads:
+                if successful_uploads:
+                    message_content += "\n\n" # Add separator only if prompt had content
+                    for file_path in successful_uploads: message_content += f"[Uploaded File: {file_path}]\n"
+                if failed_uploads:
+                    message_content += "\n\nThe following files failed to upload:\n"
+                    for failed_file in failed_uploads: message_content += f"- {failed_file}\n"
+
+        else: # If sandbox is None (local mode, Daytona not configured)
+            logger.info("Local mode: Skipping sandbox creation and file upload steps.")
+            if files:
                 message_content += "\n\n" if message_content else ""
-                for file_path in successful_uploads: message_content += f"[Uploaded File: {file_path}]\n"
-            if failed_uploads:
-                message_content += "\n\nThe following files failed to upload:\n"
-                for failed_file in failed_uploads: message_content += f"- {failed_file}\n"
+                message_content += "[Sandbox not available in local mode; file uploads skipped for the following files:]\n"
+                for file in files:
+                    if file.filename:
+                        message_content += f"- {file.filename}\n"
+                    await file.close() # Important to close files even if not uploaded
 
-        # 5. Add initial user message to thread
+        # 5. Add initial user message to thread (uses message_content)
         message_id = str(uuid.uuid4())
         message_payload = {"role": "user", "content": message_content}
         await client.table('messages').insert({
