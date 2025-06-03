@@ -159,46 +159,144 @@ def print_error(message):
     """Print error message"""
     print(f"{Colors.RED}❌  {message}{Colors.ENDC}")
 
+def install_with_winget(package_id, package_name):
+    """Attempts to install a package using winget."""
+    if not IS_WINDOWS:
+        print_info(f"Winget is a Windows tool. Cannot install {package_name} using winget on this OS.")
+        return False
+
+    print_info(f"Attempting to install {package_name} using winget...")
+    command = [
+        'winget', 'install', package_id,
+        '--scope', 'user',
+        '--accept-source-agreements',
+        '--accept-package-agreements',
+        '--source', 'winget'
+    ]
+    try:
+        # Using shell=True for winget as it sometimes behaves better.
+        # Capture output to prevent it from cluttering the setup script's output too much.
+        result = subprocess.run(
+            command,
+            shell=True,
+            check=True,
+            capture_output=True, # Capture stdout/stderr
+            text=True # Decode output as text
+        )
+        print_success(f"{package_name} installed successfully via winget.")
+        # print_info(f"Winget output:\n{result.stdout}") # Optional: print winget output for debugging
+        return True
+    except FileNotFoundError:
+        print_error(f"Failed to install {package_name}: winget command not found. Please ensure winget is installed and in your PATH.")
+        return False
+    except subprocess.SubprocessError as e:
+        cmd_str = ' '.join(command)
+        error_message = f"Failed to install {package_name} using winget. Command: '{cmd_str}'."
+        if e.stdout:
+            error_message += f"\nWinget stdout:\n{e.stdout}"
+        if e.stderr:
+            error_message += f"\nWinget stderr:\n{e.stderr}"
+        print_error(error_message)
+        print_info(f"Please try installing {package_name} manually. You can usually find instructions at the official website for {package_name}.")
+        return False
+
 def check_requirements():
     """Check if all required tools are installed"""
     requirements = {
-        'git': 'https://git-scm.com/downloads',
-        'docker': 'https://docs.docker.com/get-docker/',
-        'python3': 'https://www.python.org/downloads/',
-        'poetry': 'https://python-poetry.org/docs/#installation',
-        'pip3': 'https://pip.pypa.io/en/stable/installation/',
-        'node': 'https://nodejs.org/en/download/',
-        'npm': 'https://docs.npmjs.com/downloading-and-installing-node-js-and-npm',
+        'git': {'url': 'https://git-scm.com/downloads', 'winget_id': 'Git.Git', 'name': 'Git'},
+        'docker': {'url': 'https://docs.docker.com/get-docker/', 'name': 'Docker'},
+        'python3': {'url': 'https://www.python.org/downloads/', 'name': 'Python 3'},
+        'poetry': {'url': 'https://python-poetry.org/docs/#installation', 'name': 'Poetry'},
+        'pip3': {'url': 'https://pip.pypa.io/en/stable/installation/', 'name': 'pip3'},
+        'node': {'url': 'https://nodejs.org/en/download/', 'winget_id': 'OpenJS.NodeJS.LTS', 'name': 'Node.js (LTS) and npm'},
+        'npm': {'url': 'https://docs.npmjs.com/downloading-and-installing-node-js-and-npm', 'name': 'npm'},
     }
     
-    missing = []
+    still_missing = [] # Renamed for clarity, stores dicts: {'cmd': cmd, 'url': url, 'name': name}
     
-    for cmd, url in requirements.items():
+    for cmd, details in requirements.items():
+        url = details['url']
+        name = details['name']
+        cmd_to_check = cmd
         try:
             # Check if python3/pip3 for Windows
             if platform.system() == 'Windows' and cmd in ['python3', 'pip3']:
                 cmd_to_check = cmd.replace('3', '')
-            else:
-                cmd_to_check = cmd
-                
-            subprocess.run(
-                [cmd_to_check, '--version'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True,
-                shell=IS_WINDOWS
-            )
-            print_success(f"{cmd} is installed")
-        except (subprocess.SubprocessError, FileNotFoundError):
-            missing.append((cmd, url))
-            print_error(f"{cmd} is not installed")
-    
-    if missing:
-        print_error("Missing required tools. Please install them before continuing:")
-        for cmd, url in missing:
-            print(f"  - {cmd}: {url}")
+            # cmd_to_check is already set to cmd by default
+
+            try:
+                subprocess.run(
+                    [cmd_to_check, '--version'],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=True,
+                    shell=IS_WINDOWS
+                )
+                print_success(f"{name} ({cmd}) is installed")
+            except (subprocess.SubprocessError, FileNotFoundError):
+                print_error(f"{name} ({cmd}) is not installed.")
+                # Try to install with winget if applicable
+                if IS_WINDOWS and 'winget_id' in details:
+                    if install_with_winget(details['winget_id'], name):
+                        # Re-check after attempting install
+                        try:
+                            subprocess.run(
+                                [cmd_to_check, '--version'],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                check=True,
+                                shell=IS_WINDOWS
+                            )
+                            print_success(f"{name} ({cmd}) is now installed.")
+                            # If node was installed, also check npm
+                            if cmd == 'node':
+                                try:
+                                    subprocess.run(['npm', '--version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, shell=IS_WINDOWS)
+                                    print_success("npm (via Node.js) is also installed.")
+                                    # Remove npm from still_missing if it was added before node check
+                                    still_missing = [m for m in still_missing if m['cmd'] != 'npm']
+                                except (subprocess.SubprocessError, FileNotFoundError):
+                                    print_error("npm (via Node.js) still not found after Node.js winget install.")
+                                    # No need to add npm to still_missing here if node is considered installed.
+                                    # However, if the 'npm' check is separate and runs, it will be added.
+                        except (subprocess.SubprocessError, FileNotFoundError):
+                            print_error(f"{name} ({cmd}) still not found after winget install attempt.")
+                            still_missing.append({'cmd': cmd, 'url': url, 'name': name})
+                    else:
+                        # install_with_winget already printed an error
+                        still_missing.append({'cmd': cmd, 'url': url, 'name': name})
+                # Handle npm specifically: if node is missing, npm will likely be missing too.
+                # The 'npm' check will run separately. If node was installed by winget, npm might be found then.
+                elif cmd == 'npm' and any(m['cmd'] == 'node' for m in still_missing):
+                    print_info("npm is expected to be missing if Node.js is missing. Will re-check if Node.js gets installed.")
+                    still_missing.append({'cmd': cmd, 'url': url, 'name': name})
+                else: # Not Windows, or no winget_id, or winget failed
+                    still_missing.append({'cmd': cmd, 'url': url, 'name': name})
+
+    if still_missing:
+        print_error("\nMissing required tools after automated installation attempts. Please install them manually before continuing:")
+
+        # Deduplicate messages, e.g., if node is missing, don't also list npm separately if it was due to node.
+        final_missing_summary = []
+        cmds_in_final_summary = set()
+
+        for item in still_missing:
+            if item['cmd'] == 'npm' and any(m['cmd'] == 'node' for m in still_missing):
+                # If node is missing, npm is implicitly missing. Avoid duplicate message if node message will be shown.
+                # However, if node was successfully installed by winget but npm check still failed, then show npm.
+                node_installed_by_winget = not any(m['cmd'] == 'node' for m in still_missing)
+                if not node_installed_by_winget : # if node is still in missing list
+                    continue # skip npm message as node message will cover it.
+
+            if item['cmd'] not in cmds_in_final_summary:
+                final_missing_summary.append(item)
+                cmds_in_final_summary.add(item['cmd'])
+
+        for item in final_missing_summary:
+            print(f"  - {item['name']} ({item['cmd']}): {item['url']}")
         sys.exit(1)
     
+    print_success("All critical system requirements appear to be met.")
     return True
 
 def check_docker_running():
@@ -791,11 +889,35 @@ def setup_supabase():
             check=True,
             shell=IS_WINDOWS
         )
+        print_success("Supabase CLI is installed.")
     except (subprocess.SubprocessError, FileNotFoundError):
-        print_error("Supabase CLI is not installed.")
-        print_info("Please install it by following instructions at https://supabase.com/docs/guides/cli/getting-started")
-        print_info("After installing, run this setup again")
-        sys.exit(1)
+        print_warning("Supabase CLI not found or version check failed. Attempting to install/verify with winget...")
+        if IS_WINDOWS and install_with_winget("Supabase.CLI", "Supabase CLI"):
+            try:
+                # Re-check after attempting install
+                subprocess.run(
+                    ['supabase', '--version'],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=True,
+                    shell=IS_WINDOWS # IS_WINDOWS is correct here
+                )
+                print_success("Supabase CLI successfully installed/verified via winget.")
+            except (subprocess.SubprocessError, FileNotFoundError):
+                print_error("Supabase CLI still not found or version check failed after winget attempt.")
+                print_info("Please install it manually by following instructions at https://supabase.com/docs/guides/cli/getting-started")
+                print_info("After installing, run this setup again.")
+                sys.exit(1)
+        else:
+            # install_with_winget prints its own error if it fails or not on Windows.
+            # If not on Windows, or winget failed, print the manual install instructions.
+            if not IS_WINDOWS: # Clarify message if not on Windows (winget was skipped)
+                 print_error("Supabase CLI is not installed (winget not applicable on this OS).")
+            else: # Winget was attempted but failed
+                 print_error("Supabase CLI installation via winget failed.")
+            print_info("Please install Supabase CLI manually by following instructions at https://supabase.com/docs/guides/cli/getting-started")
+            print_info("After installing, run this setup again.")
+            sys.exit(1)
     
     # Extract project reference from Supabase URL
     supabase_url = os.environ.get('SUPABASE_URL')
@@ -878,6 +1000,39 @@ def install_dependencies():
         )
         print_success("Frontend dependencies installed successfully")
         
+        # Configure poetry for local virtual environment
+        print_info("Configuring poetry for local virtual environment...")
+        try:
+            # Configure poetry for local virtual environment (optional optimization)
+            print_info("Attempting to configure Poetry for local virtual environment (optional)...")
+            # Run first command
+            proc1 = subprocess.run(
+                ['poetry', 'config', 'virtualenvs.create', 'true', '--local'],
+                cwd='backend',
+                shell=IS_WINDOWS,
+                capture_output=True, text=True, check=False # Changed check to False
+            )
+            # Run second command
+            proc2 = subprocess.run(
+                ['poetry', 'config', 'virtualenvs.in-project', 'true', '--local'],
+                cwd='backend',
+                shell=IS_WINDOWS,
+                capture_output=True, text=True, check=False # Changed check to False
+            )
+
+            if proc1.returncode == 0 and proc2.returncode == 0:
+                print_success("Poetry successfully configured for local virtual environment creation and in-project storage.")
+            else:
+                print_warning("Could not automatically configure Poetry's virtualenv settings (virtualenvs.create true --local / virtualenvs.in-project true --local).")
+                print_info("This is an optional optimization and setup will continue.")
+                if proc1.returncode != 0:
+                    print_warning(f"  virtualenvs.create command failed. Stderr: {proc1.stderr.strip()}")
+                if proc2.returncode != 0:
+                    print_warning(f"  virtualenvs.in-project command failed. Stderr: {proc2.stderr.strip()}")
+        except Exception as e: # Catch any other unexpected error during these specific subprocess calls
+            print_warning(f"An unexpected error occurred while trying to configure poetry for local virtualenvs: {e}")
+            print_info("This is an optional optimization and setup will continue.")
+
         # Lock dependencies
         print_info("Locking dependencies...")
         subprocess.run(
