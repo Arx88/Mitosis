@@ -351,7 +351,8 @@ def collect_llm_api_keys():
     print(f"{Colors.CYAN}[1] {Colors.GREEN}OpenAI{Colors.ENDC}")
     print(f"{Colors.CYAN}[2] {Colors.GREEN}Anthropic{Colors.ENDC}")
     print(f"{Colors.CYAN}[3] {Colors.GREEN}OpenRouter{Colors.ENDC} {Colors.CYAN}(access to multiple models){Colors.ENDC}")
-    print(f"{Colors.CYAN}Enter numbers separated by commas (e.g., 1,2,3){Colors.ENDC}\n")
+    print(f"{Colors.CYAN}[4] {Colors.GREEN}Ollama{Colors.ENDC} {Colors.CYAN}(local models, ensure OLLAMA_API_BASE is set){Colors.ENDC}")
+    print(f"{Colors.CYAN}Enter numbers separated by commas (e.g., 1,2,3,4){Colors.ENDC}\n")
 
     while True:
         providers_input = input("Select providers (required, at least one): ")
@@ -368,6 +369,8 @@ def collect_llm_api_keys():
                     selected_providers.append('ANTHROPIC')
                 elif num == 3:
                     selected_providers.append('OPENROUTER')
+                elif num == 4:
+                    selected_providers.append('OLLAMA')
             
             if selected_providers:
                 break
@@ -385,12 +388,28 @@ def collect_llm_api_keys():
         'OPENAI': ['openai/gpt-4o', 'openai/gpt-4o-mini'],
         'ANTHROPIC': ['anthropic/claude-3-7-sonnet-latest', 'anthropic/claude-3-5-sonnet-latest'],
         'OPENROUTER': ['openrouter/google/gemini-2.5-pro-preview', 'openrouter/deepseek/deepseek-chat-v3-0324:free', 'openrouter/openai/gpt-4o-2024-11-20'],
+        'OLLAMA': ['ollama_chat/llama3.1', 'ollama_chat/mistral', 'ollama_chat/codellama'],
     }
     
     for provider in selected_providers:
         print_info(f"\nConfiguring {provider}")
         
-        if provider == 'OPENAI':
+        if provider == 'OLLAMA':
+            print_info("Ollama selected. Ensure your Ollama server is running.")
+            print_info("OLLAMA_API_BASE will be set in backend/.env (defaults to http://localhost:11434 if not otherwise specified by your environment).")
+            api_keys['OLLAMA_ENABLED'] = True # Mark Ollama as selected
+            # No API key needed for Ollama, but we might want to set a default model if it's the only one.
+            if 'default_model' not in model_info and len(selected_providers) == 1:
+                 model_info['default_model'] = 'ollama_chat/llama3.1'
+                 print_info(f"Default model set to {model_info['default_model']} as Ollama is the only provider.")
+            elif 'OLLAMA' in selected_providers and 'default_model' not in model_info:
+                # If ollama is selected with others, but no default is yet set (e.g. user skipped other prompts)
+                # we can prompt or set a default here. For now, let existing logic handle if others are picked.
+                # If only Ollama is picked, it's handled above.
+                pass
+
+
+        elif provider == 'OPENAI':
             while True:
                 api_key = input("Enter your OpenAI API key: ")
                 if validate_api_key(api_key):
@@ -459,14 +478,36 @@ def collect_llm_api_keys():
         
     # If no default model has been set, check which provider was selected and set an appropriate default
     if 'default_model' not in model_info:
-        if 'ANTHROPIC_API_KEY' in api_keys:
+        if 'ANTHROPIC_API_KEY' in api_keys: # Anthropic is high priority
             model_info['default_model'] = 'anthropic/claude-3-7-sonnet-latest'
-        elif 'OPENAI_API_KEY' in api_keys:
+        elif 'OPENAI_API_KEY' in api_keys: # OpenAI is next
             model_info['default_model'] = 'openai/gpt-4o'
-        elif 'OPENROUTER_API_KEY' in api_keys:
+        elif 'OPENROUTER_API_KEY' in api_keys: # OpenRouter after that
             model_info['default_model'] = 'openrouter/google/gemini-2.5-flash-preview'
-    
-    print_success(f"Using {model_info['default_model']} as the default model")
+        elif 'OLLAMA_ENABLED' in api_keys and len(selected_providers) == 1 : # Ollama if it's the *only* one and no other default was set
+            model_info['default_model'] = 'ollama_chat/llama3.1'
+        elif not selected_providers: # Should not happen due to check above
+             print_error("No providers selected, cannot set a default model.")
+             # Potentially exit or raise error
+        else: # Fallback if somehow no default is set, pick the first selected provider's default
+            first_provider = selected_providers[0]
+            if first_provider == 'OLLAMA':
+                 model_info['default_model'] = model_aliases['OLLAMA'][0]
+            elif first_provider == 'ANTHROPIC':
+                 model_info['default_model'] = model_aliases['ANTHROPIC'][0]
+            elif first_provider == 'OPENAI':
+                 model_info['default_model'] = model_aliases['OPENAI'][0]
+            elif first_provider == 'OPENROUTER':
+                 model_info['default_model'] = model_aliases['OPENROUTER'][0]
+            print_warning(f"Default model selection logic fallback, using: {model_info.get('default_model', 'not set')}")
+
+    if 'default_model' in model_info:
+        print_success(f"Using {model_info['default_model']} as the default model")
+    else:
+        # This case should be rare given the logic above.
+        print_error("Could not determine a default model. Please check your selections.")
+        # Potentially ask user to pick one manually here or set a hardcoded fallback.
+        # For now, we'll let it proceed, but `MODEL_TO_USE` might be missing in .env
     
     # Add the default model to the API keys dictionary
     api_keys['MODEL_TO_USE'] = model_info['default_model']
@@ -585,35 +626,52 @@ ENV_MODE=local
     # LLM section
     env_content += "\n# LLM Providers:\n"
     # Add empty values for all LLM providers we support
-    all_llm_keys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'MODEL_TO_USE']
+    # OLLAMA_API_KEY is not used by LiteLLM typically, but OLLAMA_API_BASE is.
+    # OLLAMA_ENABLED was a temporary marker in collect_llm_api_keys.
+    # config.py handles OLLAMA_API_BASE default.
+    all_llm_keys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GROQ_API_KEY', 'OPENROUTER_API_KEY', 'MODEL_TO_USE', 'OLLAMA_API_BASE'] # Added OLLAMA_API_BASE
     # Add AWS keys separately
     aws_keys = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION_NAME']
     
-    # First add the keys that were provided
-    for key, value in env_vars['llm'].items():
-        if key in all_llm_keys:
+    # Process provided LLM keys
+    llm_env_values = env_vars['llm'].copy() # Work on a copy
+
+    # If Ollama was selected, ensure OLLAMA_API_BASE gets a value for .env
+    # Even if it's empty, so config.py can load it (and apply default if empty)
+    if llm_env_values.pop('OLLAMA_ENABLED', False): # Remove the temporary marker
+        if 'OLLAMA_API_BASE' not in llm_env_values: # If not explicitly set (e.g. future prompt)
+             llm_env_values['OLLAMA_API_BASE'] = '' # Add it as empty, config.py will use default
+
+    # First add the keys that were provided or derived
+    for key, value in llm_env_values.items():
+        if key in all_llm_keys: # Check if it's a recognized key
             env_content += f"{key}={value}\n"
-            # Remove from the list once added
-            if key in all_llm_keys:
+            if key in all_llm_keys: # Remove from list to avoid adding it again as empty
                 all_llm_keys.remove(key)
     
-    # Add empty values for any remaining LLM keys
+    # Add empty values for any remaining LLM keys that weren't provided
     for key in all_llm_keys:
-        env_content += f"{key}=\n"
-    
+        # GROQ_API_KEY is often not set, so ensure it's written if not present
+        # OLLAMA_API_BASE will be written if it was in llm_env_values (e.g. empty string)
+        # or if it's still in all_llm_keys (meaning it wasn't in llm_env_values)
+        if key == 'OLLAMA_API_BASE' and 'OLLAMA_API_BASE' not in llm_env_values:
+             env_content += f"{key}=\n" # Will use default from config.py
+        elif key != 'OLLAMA_API_BASE': # Avoid double-adding OLLAMA_API_BASE
+            env_content += f"{key}=\n"
+
     # AWS section
     env_content += "\n# AWS Bedrock\n"
     for key in aws_keys:
-        value = env_vars['llm'].get(key, '')
+        value = llm_env_values.get(key, '') # Use llm_env_values which is the processed set
         env_content += f"{key}={value}\n"
     
     # Additional OpenRouter params
-    if 'OR_SITE_URL' in env_vars['llm'] or 'OR_APP_NAME' in env_vars['llm']:
+    if 'OR_SITE_URL' in llm_env_values or 'OR_APP_NAME' in llm_env_values:
         env_content += "\n# OpenRouter Additional Settings\n"
-        if 'OR_SITE_URL' in env_vars['llm']:
-            env_content += f"OR_SITE_URL={env_vars['llm']['OR_SITE_URL']}\n"
-        if 'OR_APP_NAME' in env_vars['llm']:
-            env_content += f"OR_APP_NAME={env_vars['llm']['OR_APP_NAME']}\n"
+        if 'OR_SITE_URL' in llm_env_values:
+            env_content += f"OR_SITE_URL={llm_env_values['OR_SITE_URL']}\n"
+        if 'OR_APP_NAME' in llm_env_values:
+            env_content += f"OR_APP_NAME={llm_env_values['OR_APP_NAME']}\n"
     
     # DATA APIs section
     env_content += "\n# DATA APIS\n"
