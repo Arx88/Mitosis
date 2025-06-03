@@ -140,7 +140,7 @@ class Configuration:
     REDIS_SSL: bool = True
     
     # Daytona sandbox configuration
-    DAYTONA_API_KEY: str
+    DAYTONA_API_KEY: Optional[str]
     DAYTONA_SERVER_URL: str
     DAYTONA_TARGET: str
     
