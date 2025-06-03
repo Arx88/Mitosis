@@ -933,7 +933,12 @@ async def get_available_models(
         # Create model info with display names for ALL models
         model_info = []
         for model in all_models:
-            display_name = model_aliases.get(model, model.split('/')[-1] if '/' in model else model)
+            if model.startswith("ollama/"):
+                actual_model_name = model.split('/')[-1]
+                display_name = f"Ollama:{actual_model_name}"
+            else:
+                # Use existing logic for other models (aliases or derived from ID)
+                display_name = model_aliases.get(model, model.split('/')[-1] if '/' in model else model)
             
             # Check if model requires subscription (not in free tier)
             requires_sub = model not in free_tier_models
