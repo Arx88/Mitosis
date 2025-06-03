@@ -7,18 +7,27 @@ from typing import Optional, Dict, List, Tuple, Any
 
 logger = logging.getLogger(__name__) # Or from utils.logger if available and preferred
 
-# Initialize Docker client. Handles DOCKER_HOST env var or default socket.
 try:
-    client = docker.from_env()
+    # Explicitly try the standard Unix socket first, as it's mounted.
+    client = docker.DockerClient(base_url='unix:///var/run/docker.sock', timeout=10)
     # Verify connection
     client.ping()
-    logger.info("Docker client initialized successfully and connected to Docker daemon.")
-except docker.errors.DockerException as e:
-    logger.error(
-        f"Failed to initialize Docker client or connect to Docker daemon. "
-        f"Ensure Docker is running and accessible. Error: {e}"
+    logger.info("Docker client initialized successfully via unix:///var/run/docker.sock and connected to Docker daemon.")
+except docker.errors.DockerException as e_unix_socket:
+    logger.warning(
+        f"Failed to initialize Docker client via unix:///var/run/docker.sock. Error: {e_unix_socket}. "
+        f"Attempting docker.from_env() as a fallback."
     )
-    client = None # Set client to None if initialization fails
+    try:
+        client = docker.from_env(timeout=10) # Added timeout here as well for consistency
+        client.ping()
+        logger.info("Docker client initialized successfully via docker.from_env() and connected to Docker daemon.")
+    except docker.errors.DockerException as e_from_env:
+        logger.error(
+            f"Failed to initialize Docker client via docker.from_env() as well. "
+            f"Ensure Docker is running and accessible. Error: {e_from_env}"
+        )
+        client = None # Set client to None if all initialization fails
 
 def start_sandbox_container(image_name: str, env_vars: Dict[str, str], project_id: Optional[str] = None,
                             vnc_port_host: Optional[int] = None, web_port_host: Optional[int] = None) -> Optional[Dict[str, Any]]:
