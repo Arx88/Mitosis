@@ -141,8 +141,8 @@ class Configuration:
     
     # Daytona sandbox configuration
     DAYTONA_API_KEY: Optional[str]
-    DAYTONA_SERVER_URL: str
-    DAYTONA_TARGET: str
+    DAYTONA_SERVER_URL: Optional[str]
+    DAYTONA_TARGET: Optional[str]
     
     # Search and other API keys
     TAVILY_API_KEY: str
