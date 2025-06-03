@@ -3,10 +3,12 @@ from typing import Optional
 
 from agentpress.thread_manager import ThreadManager
 from agentpress.tool import Tool
-from daytona_sdk import Sandbox
+# Sandbox type can be Daytona's or our wrapper, so using Any for now, or a common base if defined
+from typing import Any
 from sandbox.sandbox import get_or_start_sandbox
 from utils.logger import logger
 from utils.files_utils import clean_path
+from utils.config import config # Added import
 
 class SandboxToolsBase(Tool):
     """Base class for all sandbox tools that provides project-based sandbox access."""
@@ -19,57 +21,64 @@ class SandboxToolsBase(Tool):
         self.project_id = project_id
         self.thread_manager = thread_manager
         self.workspace_path = "/workspace"
-        self._sandbox = None
-        self._sandbox_id = None
-        self._sandbox_pass = None
+        self._sandbox: Optional[Any] = None # Can be Daytona Sandbox or LocalDockerSandboxWrapper
+        self._sandbox_id: Optional[str] = None
+        self._sandbox_pass: Optional[str] = None
+        self.sandbox_type = config.get('SANDBOX_TYPE', 'daytona') # Store sandbox type
 
-    async def _ensure_sandbox(self) -> Sandbox:
+    async def _ensure_sandbox(self) -> Any: # Return type Any
         """Ensure we have a valid sandbox instance, retrieving it from the project if needed."""
         if self._sandbox is None:
+            if self.thread_manager is None or self.thread_manager.db is None:
+                logger.error("ThreadManager or DB client not available in SandboxToolsBase, cannot ensure sandbox.")
+                raise ValueError("Database connection not available to ensure sandbox.")
             try:
                 # Get database client
-                client = await self.thread_manager.db.client
+                client = await self.thread_manager.db.client # db_client is the supabase client instance
                 
-                # Get project data
-                project = await client.table('projects').select('*').eq('project_id', self.project_id).execute()
-                if not project.data or len(project.data) == 0:
-                    raise ValueError(f"Project {self.project_id} not found")
+                # Project ID is already available as self.project_id
+                # Get or start the sandbox using the updated signature
+                self._sandbox = await get_or_start_sandbox(self.project_id, client) # Corrected call
+
+                if self._sandbox is None:
+                    # get_or_start_sandbox might return None if it fails internally
+                    raise ValueError(f"Failed to get or start sandbox for project {self.project_id}")
+
+                # Store sandbox id and pass if sandbox object is successfully retrieved
+                # This assumes the sandbox object (Daytona or Wrapper) has an 'id' attribute
+                # And we can fetch 'pass' from the DB again if needed, or if it's part of a wrapper.
+                # For now, let's ensure self._sandbox_id is set from the sandbox object.
+                self._sandbox_id = self._sandbox.id
                 
-                project_data = project.data[0]
-                sandbox_info = project_data.get('sandbox', {})
-                
-                if not sandbox_info.get('id'):
-                    raise ValueError(f"No sandbox found for project {self.project_id}")
-                
-                # Store sandbox info
-                self._sandbox_id = sandbox_info['id']
-                self._sandbox_pass = sandbox_info.get('pass')
-                
-                # Get or start the sandbox
-                self._sandbox = await get_or_start_sandbox(self._sandbox_id)
-                
+                # Fetching pass again if necessary, though it's used by create_sandbox primarily.
+                # If tools need the VNC pass, they might need to get it from the sandbox object if available,
+                # or we query the DB here. For now, let's assume it's not directly needed by _ensure_sandbox's role.
+                # project_result = await client.table('projects').select('sandbox').eq('project_id', self.project_id).maybe_single().execute()
+                # if project_result.data and project_result.data.get('sandbox'):
+                #     self._sandbox_pass = project_result.data['sandbox'].get('pass')
+
                 # # Log URLs if not already printed
-                # if not SandboxToolsBase._urls_printed:
-                #     vnc_link = self._sandbox.get_preview_link(6080)
-                #     website_link = self._sandbox.get_preview_link(8080)
+                # if not SandboxToolsBase._urls_printed and hasattr(self._sandbox, 'get_preview_link'):
+                #     vnc_preview_info = self._sandbox.get_preview_link(6080) # dict for wrapper
+                #     web_preview_info = self._sandbox.get_preview_link(8080) # dict for wrapper
                     
-                #     vnc_url = vnc_link.url if hasattr(vnc_link, 'url') else str(vnc_link)
-                #     website_url = website_link.url if hasattr(website_link, 'url') else str(website_link)
+                #     vnc_url = vnc_preview_info.get('url') if isinstance(vnc_preview_info, dict) else (vnc_preview_info.url if hasattr(vnc_preview_info, 'url') else str(vnc_preview_info))
+                #     web_url = web_preview_info.get('url') if isinstance(web_preview_info, dict) else (web_preview_info.url if hasattr(web_preview_info, 'url') else str(web_preview_info))
                     
                 #     print("\033[95m***")
                 #     print(f"VNC URL: {vnc_url}")
-                #     print(f"Website URL: {website_url}")
+                #     print(f"Website URL: {web_url}")
                 #     print("***\033[0m")
                 #     SandboxToolsBase._urls_printed = True
                 
             except Exception as e:
-                logger.error(f"Error retrieving sandbox for project {self.project_id}: {str(e)}", exc_info=True)
-                raise e
+                logger.error(f"Error ensuring sandbox for project {self.project_id}: {str(e)}", exc_info=True)
+                raise e # Re-raise after logging
         
         return self._sandbox
 
     @property
-    def sandbox(self) -> Sandbox:
+    def sandbox(self) -> Any: # Return type Any
         """Get the sandbox instance, ensuring it exists."""
         if self._sandbox is None:
             raise RuntimeError("Sandbox not initialized. Call _ensure_sandbox() first.")

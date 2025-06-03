@@ -11,6 +11,7 @@ services:
     volumes:
       - .:/app
       - ./logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     depends_on:
       redis:
@@ -48,6 +49,7 @@ services:
     volumes:
       - .:/app
       - ./worker-logs:/app/logs
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     depends_on:
       redis:

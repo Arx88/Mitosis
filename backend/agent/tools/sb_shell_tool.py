@@ -4,6 +4,8 @@ from uuid import uuid4
 from agentpress.tool import ToolResult, openapi_schema, xml_schema
 from sandbox.tool_base import SandboxToolsBase
 from agentpress.thread_manager import ThreadManager
+from sandbox import local_docker_handler # Added import
+from utils.logger import logger # Added import
 
 class SandboxShellTool(SandboxToolsBase):
     """Tool for executing tasks in a Daytona sandbox with browser-use capabilities. 
@@ -198,33 +200,54 @@ class SandboxShellTool(SandboxToolsBase):
             return self.fail_response(f"Error executing command: {str(e)}")
 
     async def _execute_raw_command(self, command: str) -> Dict[str, Any]:
-        """Execute a raw command directly in the sandbox."""
-        # Ensure session exists for raw commands
-        session_id = await self._ensure_session("raw_commands")
+        """Execute a raw command directly in the sandbox, adapting to sandbox type."""
+        await self._ensure_sandbox() # Ensures self.sandbox is set
+
+        if self.sandbox_type == 'local_docker':
+            if not self.sandbox or not self.sandbox.id: # self.sandbox is LocalDockerSandboxWrapper
+                logger.error("Local Docker sandbox not properly initialized in tool.")
+                return {"output": "Local Docker sandbox error in tool", "exit_code": -1}
+
+            stdout, stderr, exit_code = local_docker_handler.execute_command_in_container(
+                container_id=self.sandbox.id,
+                command=command,
+                workdir=self.workspace_path # Default workdir for raw commands
+            )
+            combined_output = stdout
+            if stderr:
+                combined_output += "\n--- STDERR ---\n" + stderr
+            return {"output": combined_output, "exit_code": exit_code}
         
-        # Execute command in session
-        from sandbox.sandbox import SessionExecuteRequest
-        req = SessionExecuteRequest(
-            command=command,
-            var_async=False,
-            cwd=self.workspace_path
-        )
-        
-        response = self.sandbox.process.execute_session_command(
-            session_id=session_id,
-            req=req,
-            timeout=30  # Short timeout for utility commands
-        )
-        
-        logs = self.sandbox.process.get_session_command_logs(
-            session_id=session_id,
-            command_id=response.cmd_id
-        )
-        
-        return {
-            "output": logs,
-            "exit_code": response.exit_code
-        }
+        else: # Assume Daytona or other type that uses the original process object structure
+            if not self.sandbox or not hasattr(self.sandbox, 'process'):
+                logger.error("Sandbox process object not available for Daytona-style execution.")
+                return {"output": "Daytona sandbox process error in tool", "exit_code": -1}
+
+            # Existing Daytona-style logic
+            session_id = await self._ensure_session("raw_commands_daytona")
+
+            from sandbox.sandbox import SessionExecuteRequest # Keep import local to this block
+            req = SessionExecuteRequest(
+                command=command,
+                # var_async=False, # Original had this, check Daytona SDK for correct param for sync
+                cwd=self.workspace_path
+            )
+
+            try:
+                response = self.sandbox.process.execute_session_command(
+                    session_id=session_id,
+                    req=req,
+                    timeout=30  # Short timeout for utility commands
+                )
+
+                logs = self.sandbox.process.get_session_command_logs(
+                    session_id=session_id,
+                    command_id=response.cmd_id
+                )
+                return {"output": logs, "exit_code": response.exit_code}
+            except Exception as e:
+                logger.error(f"Error during Daytona raw command execution: {e}")
+                return {"output": str(e), "exit_code": -1}
 
     @openapi_schema({
         "type": "function",
