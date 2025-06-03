@@ -218,10 +218,10 @@ def check_requirements():
         url = details['url']
         name = details['name']
         cmd_to_check = cmd
-        try:
-            # Check if python3/pip3 for Windows
-            if platform.system() == 'Windows' and cmd in ['python3', 'pip3']:
-                cmd_to_check = cmd.replace('3', '')
+        # Removed the outer try block that was here.
+        # Check if python3/pip3 for Windows
+        if platform.system() == 'Windows' and cmd in ['python3', 'pip3']:
+            cmd_to_check = cmd.replace('3', '')
             # cmd_to_check is already set to cmd by default
 
             try:
@@ -272,6 +272,8 @@ def check_requirements():
                     still_missing.append({'cmd': cmd, 'url': url, 'name': name})
                 else: # Not Windows, or no winget_id, or winget failed
                     still_missing.append({'cmd': cmd, 'url': url, 'name': name})
+        # The except (subprocess.SubprocessError, FileNotFoundError) related to the removed outer try is also removed.
+        # The inner try-except blocks for subprocess.run and winget checks are preserved.
 
     if still_missing:
         print_error("\nMissing required tools after automated installation attempts. Please install them manually before continuing:")
