@@ -38,24 +38,8 @@ def print_banner():
 {Colors.ENDC}
 """)
 
-PROGRESS_FILE = '.setup_progress'
-
-def save_progress(step):
-    with open(PROGRESS_FILE, 'w') as f:
-        f.write(str(step))
-
-def load_progress():
-    if os.path.exists(PROGRESS_FILE):
-        with open(PROGRESS_FILE, 'r') as f:
-            try:
-                return int(f.read().strip())
-            except ValueError:
-                return 0
-    return 0
-
-def clear_progress():
-    if os.path.exists(PROGRESS_FILE):
-        os.remove(PROGRESS_FILE)
+# PROGRESS_FILE constant is no longer used.
+# Functions save_progress, load_progress, and clear_progress are removed.
 
 ENV_DATA_FILE = '.setup_env.json'
 
@@ -980,131 +964,123 @@ def final_instructions(use_docker=True, env_vars=None):
 # Then update your main() function as follows:
 
 def main():
-    total_steps = 8
-    current_step = load_progress() + 1
+    total_steps = 8  # Total number of steps remains for display purposes
+    current_step = 1 # Initialize current_step to 1
 
     print_banner()
     # General introduction to the setup wizard.
     print(f"Welcome to the Suna Setup Wizard!")
     print("This script will guide you through configuring the Suna application.")
     print(f"It will help you set up API keys, database connections, and other essential settings.")
-    print(f"You can resume an interrupted setup by running this script again.\n")
+    print(f"Previously entered data (if any) will be loaded from {Colors.YELLOW}{ENV_DATA_FILE}{Colors.ENDC} and you'll be asked to confirm its use.\n")
 
     # Load existing environment data or defaults. This supports resuming setup.
     env_vars = load_env_data()
 
     # Step 1: Check system requirements (Docker, Git, Python, Node, etc.)
-    if current_step <= 1:
-        print_step(current_step, total_steps, "Checking System Requirements")
-        if not check_requirements(): # Exits if requirements are not met.
+    print_step(current_step, total_steps, "Checking System Requirements")
+    if not check_requirements(): # Exits if requirements are not met.
+        sys.exit(1)
+    if not check_docker_running(): # Exits if Docker is not running.
             sys.exit(1)
-        if not check_docker_running(): # Exits if Docker is not running.
-             sys.exit(1)
-        if not check_suna_directory(): # Exits if not in the correct Suna directory.
-            print_error("This setup script must be run from the Suna repository root directory.")
-            sys.exit(1)
-        save_progress(current_step) # Save progress after successful completion of this step.
-        current_step += 1
+    if not check_suna_directory(): # Exits if not in the correct Suna directory.
+        print_error("This setup script must be run from the Suna repository root directory.")
+        sys.exit(1)
+    current_step += 1
 
     # Step 2: Collect Supabase information (database and authentication)
-    if current_step <= 2:
-        print_step(current_step, total_steps, "Collecting Supabase Information (Database & Auth)")
-        # Prompt user to reuse existing Supabase config if available.
-        if not prompt_to_reuse_config("Supabase", env_vars.get('supabase'), specific_check_key='SUPABASE_URL'):
-            env_vars['supabase'] = collect_supabase_info()
+    print_step(current_step, total_steps, "Collecting Supabase Information (Database & Auth)")
+    # Prompt user to reuse existing Supabase config if available.
+    if not prompt_to_reuse_config("Supabase", env_vars.get('supabase'), specific_check_key='SUPABASE_URL'):
+        env_vars['supabase'] = collect_supabase_info()
 
-        # Critical check: SUPABASE_URL is required for subsequent Supabase CLI operations.
-        if env_vars.get('supabase', {}).get('SUPABASE_URL'):
-             os.environ['SUPABASE_URL'] = env_vars['supabase']['SUPABASE_URL'] # Set for Supabase CLI
-        else:
-            print_error("Supabase URL is missing. This is critical for the setup to continue. Please ensure it's provided.")
-            sys.exit(1) # Exit if critical information is missing.
-        save_env_data(env_vars) # Save the collected/confirmed data.
-        save_progress(current_step)
-        current_step += 1
+    # Critical check: SUPABASE_URL is required for subsequent Supabase CLI operations.
+    if env_vars.get('supabase', {}).get('SUPABASE_URL'):
+            os.environ['SUPABASE_URL'] = env_vars['supabase']['SUPABASE_URL'] # Set for Supabase CLI
+    else:
+        print_error("Supabase URL is missing. This is critical for the setup to continue. Please ensure it's provided.")
+        sys.exit(1) # Exit if critical information is missing.
+    save_env_data(env_vars) # Save the collected/confirmed data.
+    current_step += 1
 
     # Step 3: Collect Agent Sandbox information (Daytona or Local Docker)
-    if current_step <= 3:
-        print_step(current_step, total_steps, "Configuring Agent Execution Sandbox")
-        daytona_data = env_vars.get('daytona', {})
-        reuse_sandbox_config = False
-        # Determine if there's a reusable configuration for Daytona or Local Docker.
-        if daytona_data.get('SETUP_TYPE') == 'daytona' and daytona_data.get('DAYTONA_API_KEY'):
-            reuse_sandbox_config = prompt_to_reuse_config("Daytona Sandbox", daytona_data, specific_check_key='DAYTONA_API_KEY')
-        elif daytona_data.get('SETUP_TYPE') == 'local_docker':
-            reuse_sandbox_config = prompt_to_reuse_config("Local Docker Sandbox", daytona_data, specific_check_key='SETUP_TYPE')
+    print_step(current_step, total_steps, "Configuring Agent Execution Sandbox")
+    daytona_data = env_vars.get('daytona', {})
+    reuse_sandbox_config = False
+    # Determine if there's a reusable configuration for Daytona or Local Docker.
+    if daytona_data.get('SETUP_TYPE') == 'daytona' and daytona_data.get('DAYTONA_API_KEY'):
+        reuse_sandbox_config = prompt_to_reuse_config("Daytona Sandbox", daytona_data, specific_check_key='DAYTONA_API_KEY')
+    elif daytona_data.get('SETUP_TYPE') == 'local_docker':
+        reuse_sandbox_config = prompt_to_reuse_config("Local Docker Sandbox", daytona_data, specific_check_key='SETUP_TYPE')
 
-        if not reuse_sandbox_config:
-            env_vars['daytona'] = collect_daytona_info() # Collect sandbox info if not reused.
+    if not reuse_sandbox_config:
+        env_vars['daytona'] = collect_daytona_info() # Collect sandbox info if not reused.
 
-        save_env_data(env_vars)
-        save_progress(current_step)
-        current_step += 1
+    save_env_data(env_vars)
+    current_step += 1
 
     # Step 4: Collect LLM (Large Language Model) API keys
-    if current_step <= 4:
-        print_step(current_step, total_steps, "Collecting LLM API Keys")
-        if not prompt_to_reuse_config("LLM API", env_vars.get('llm'), specific_check_key='MODEL_TO_USE'):
-            env_vars['llm'] = collect_llm_api_keys()
-        save_env_data(env_vars)
-        save_progress(current_step)
-        current_step += 1
+    print_step(current_step, total_steps, "Collecting LLM API Keys")
+    if not prompt_to_reuse_config("LLM API", env_vars.get('llm'), specific_check_key='MODEL_TO_USE'):
+        env_vars['llm'] = collect_llm_api_keys()
+    save_env_data(env_vars)
+    current_step += 1
 
     # Step 5: Collect Search and Web Scraping API keys (Tavily, Firecrawl)
-    if current_step <= 5:
-        print_step(current_step, total_steps, "Collecting Search & Web Scraping API Keys")
-        if not prompt_to_reuse_config("Search/WebScraping API", env_vars.get('search'), specific_check_key='TAVILY_API_KEY'):
-            env_vars['search'] = collect_search_api_keys()
-        save_env_data(env_vars)
-        save_progress(current_step)
-        current_step += 1
+    print_step(current_step, total_steps, "Collecting Search & Web Scraping API Keys")
+    if not prompt_to_reuse_config("Search/WebScraping API", env_vars.get('search'), specific_check_key='TAVILY_API_KEY'):
+        env_vars['search'] = collect_search_api_keys()
+    save_env_data(env_vars)
+    current_step += 1
 
     # Step 6: Collect RapidAPI key (optional, for additional API services)
-    if current_step <= 6:
-        print_step(current_step, total_steps, "Collecting RapidAPI Key (Optional)")
-        if not prompt_to_reuse_config("RapidAPI", env_vars.get('rapidapi'), specific_check_key='RAPID_API_KEY'):
-            env_vars['rapidapi'] = collect_rapidapi_keys()
-        save_env_data(env_vars)
-        save_progress(current_step)
-        current_step += 1
+    print_step(current_step, total_steps, "Collecting RapidAPI Key (Optional)")
+    if not prompt_to_reuse_config("RapidAPI", env_vars.get('rapidapi'), specific_check_key='RAPID_API_KEY'):
+        env_vars['rapidapi'] = collect_rapidapi_keys()
+    save_env_data(env_vars)
+    current_step += 1
 
     # Step 7: Setup Supabase (database migrations)
-    if current_step <= 7:
-        print_step(current_step, total_steps, "Setting up Supabase Database (Migrations)")
-        # This step involves running Supabase CLI commands to prepare the database schema.
-        setup_supabase()
-        save_progress(current_step)
-        current_step += 1
+    print_step(current_step, total_steps, "Setting up Supabase Database (Migrations)")
+    # This step involves running Supabase CLI commands to prepare the database schema.
+    setup_supabase()
+    current_step += 1
 
     # Step 8: Install dependencies, configure .env files, and start Suna services
-    if current_step <= 8:
-        print_step(current_step, total_steps, "Installing Dependencies & Finalizing Setup")
-        install_dependencies() # Installs frontend (npm) and backend (poetry) dependencies.
+    print_step(current_step, total_steps, "Installing Dependencies & Finalizing Setup")
+    install_dependencies() # Installs frontend (npm) and backend (poetry) dependencies.
 
-        print_info("Configuring Suna environment files (.env files)...")
-        # Initial configuration assuming Docker Compose will be used for Suna services.
-        # This sets Redis/RabbitMQ hostnames to service names (e.g., 'redis', 'rabbitmq').
-        configure_backend_env(env_vars, True)
-        configure_frontend_env(env_vars, True)
+    print_info("Configuring Suna environment files (.env files)...")
+    # Initial configuration assuming Docker Compose will be used for Suna services.
+    # This sets Redis/RabbitMQ hostnames to service names (e.g., 'redis', 'rabbitmq').
+    configure_backend_env(env_vars, True)
+    configure_frontend_env(env_vars, True)
 
-        print_step(current_step, total_steps, "Starting Suna Services")
-        # start_suna() asks the user if they want to use Docker Compose or start manually.
-        # It returns True if Docker Compose is chosen for Suna services, False for manual.
-        use_docker_for_suna_services = start_suna()
+    print_step(current_step, total_steps, "Starting Suna Services") # Note: current_step is 8 here.
+    # start_suna() asks the user if they want to use Docker Compose or start manually.
+    # It returns True if Docker Compose is chosen for Suna services, False for manual.
+    use_docker_for_suna_services = start_suna()
 
-        # If the user chose manual startup for Suna services (backend, frontend, worker),
-        # the .env files need to be reconfigured for localhost Redis/RabbitMQ.
-        if not use_docker_for_suna_services:
-            print_info("Re-configuring environment files for manual startup (Redis/RabbitMQ on localhost)...")
-            configure_backend_env(env_vars, False) # Pass False to set Redis/RabbitMQ to localhost
-            configure_frontend_env(env_vars, False) # Though this currently doesn't change for frontend
+    # If the user chose manual startup for Suna services (backend, frontend, worker),
+    # the .env files need to be reconfigured for localhost Redis/RabbitMQ.
+    if not use_docker_for_suna_services:
+        print_info("Re-configuring environment files for manual startup (Redis/RabbitMQ on localhost)...")
+        configure_backend_env(env_vars, False) # Pass False to set Redis/RabbitMQ to localhost
+        configure_frontend_env(env_vars, False) # Though this currently doesn't change for frontend
 
-        final_instructions(use_docker_for_suna_services, env_vars)
+    final_instructions(use_docker_for_suna_services, env_vars)
 
-        # Cleanup progress and saved environment data file upon successful completion.
-        clear_progress()
-        if os.path.exists(ENV_DATA_FILE):
-            os.remove(ENV_DATA_FILE)
+    # The .setup_env.json file (ENV_DATA_FILE) is intentionally kept after setup completion.
+    # This allows users to re-run the setup script and reuse their previously entered
+    # configurations if needed (e.g., after pulling updates that require new .env settings,
+    # or if they want to change a specific part of the configuration without re-entering everything).
+    # To force a completely fresh setup, the user can manually delete .setup_env.json.
+    #
+    # Previously, this file might have been deleted upon successful setup.
+    # Example of old code that would delete it:
+    # if os.path.exists(ENV_DATA_FILE):
+    #     os.remove(ENV_DATA_FILE)
+    print_info(f"Setup data is saved in {Colors.YELLOW}{ENV_DATA_FILE}{Colors.ENDC} for future runs.")
 
 if __name__ == "__main__":
     try:
