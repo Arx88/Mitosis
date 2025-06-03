@@ -52,8 +52,11 @@ Obtain the following API keys:
   - [Tavily](https://tavily.com/) - For enhanced search capabilities
   - [Firecrawl](https://firecrawl.dev/) - For web scraping capabilities
 
-- **Agent Execution**:
-  - [Daytona](https://app.daytona.io/) - For secure agent execution
+- **Agent Execution Sandbox**:
+  - The `setup.py` script allows you to choose between:
+    - **Daytona**: A cloud-based environment for secure agent execution. Requires a Daytona account and API key.
+    - **Local Docker**: Uses your local Docker installation to run the agent sandbox. Does not require external services for the sandbox itself.
+  - This choice is configured via the `SANDBOX_TYPE` variable in the `backend/.env` file.
 
 #### Optional
 
@@ -108,15 +111,18 @@ During setup, you'll need to:
    - Navigate to Project Settings → API
    - Add 'basejump' to the Exposed Schema section
 
-### 4. Daytona Configuration
+### 4. Agent Sandbox Configuration
 
-As part of the setup, you'll need to:
+The `setup.py` script handles the configuration for your chosen agent execution sandbox.
 
-1. Create a Daytona account
-2. Generate an API key
-3. Create a Docker image:
-   - Image name: `kortix/suna:0.1.2.8`
-   - Entrypoint: `/usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf`
+- **If you choose Daytona:**
+  1. Create a Daytona account.
+  2. Generate an API key.
+  3. In Daytona, create a Docker image:
+     - Image name: `kortix/suna:0.1.2.8`
+     - Entrypoint: `/usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf`
+- **If you choose Local Docker:**
+  - Ensure your local Docker is running. The setup script will configure `backend/.env` to use `SANDBOX_TYPE=local_docker`.
 
 ## Manual Configuration
 
@@ -160,9 +166,15 @@ FIRECRAWL_API_KEY=your-firecrawl-key
 FIRECRAWL_URL=https://api.firecrawl.dev
 
 # Sandbox container provider
-DAYTONA_API_KEY=your-daytona-key
-DAYTONA_SERVER_URL=https://app.daytona.io/api
-DAYTONA_TARGET=us
+# This is configured by setup.py based on your choice.
+# If you chose Daytona:
+# SANDBOX_TYPE=daytona
+# DAYTONA_API_KEY=your-daytona-key
+# DAYTONA_SERVER_URL=https://app.daytona.io/api
+# DAYTONA_TARGET=us
+#
+# If you chose Local Docker:
+# SANDBOX_TYPE=local_docker
 
 NEXT_PUBLIC_URL=http://localhost:3000
 ```
@@ -255,9 +267,14 @@ poetry run python3.11 -m dramatiq run_agent_background
    - Verify API keys are correctly entered
    - Check for API usage limits or restrictions
 
-4. **Daytona connection issues**
-   - Verify Daytona API key
-   - Check if the container image is correctly configured
+4. **Sandbox Execution Issues**
+   - **If using Daytona:**
+     - Verify your Daytona API key and that the service is accessible.
+     - Ensure the custom image (`kortix/suna:0.1.2.8`) is correctly configured in your Daytona account with the specified entrypoint.
+   - **If using Local Docker:**
+     - Ensure Docker is running on your system.
+     - Check Docker logs for the sandbox container if it fails to start (usually named like `sbox-...`).
+     - Ensure the `kortix/suna:0.1.2.8` image is available locally or can be pulled. Suna will attempt to use this image for local sandboxes.
 
 ### Logs
 
