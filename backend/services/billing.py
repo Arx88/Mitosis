@@ -14,6 +14,7 @@ from services.supabase import DBConnection
 from utils.auth_utils import get_current_user_id_from_jwt
 from pydantic import BaseModel
 from utils.constants import MODEL_ACCESS_TIERS, MODEL_NAME_ALIASES
+import litellm # Added import for litellm
 # Initialize Stripe
 stripe.api_key = config.STRIPE_SECRET_KEY
 
@@ -916,40 +917,74 @@ async def get_available_models(
             tier_info = SUBSCRIPTION_TIERS.get(price_id)
             if tier_info:
                 tier_name = tier_info['name']
-        
-        # Get all unique full model names from MODEL_NAME_ALIASES
-        all_models = set()
-        model_aliases = {}
+
+        model_info = []
+        fetched_ollama_model_ids = set()
+
+        if config.OLLAMA_API_BASE:
+            try:
+                logger.info(f"Attempting to fetch models from Ollama server at {config.OLLAMA_API_BASE}")
+                # In aget_model_list, model_list is a list of dicts, not strings.
+                # Each dict has various keys like 'model_name', 'litellm_provider', etc.
+                # We need to extract the actual model name, which is usually under 'model_name'.
+                ollama_models_details = await litellm.aget_model_list(api_base=config.OLLAMA_API_BASE)
+                if ollama_models_details: # Check if the list is not empty
+                    logger.info(f"Successfully fetched {len(ollama_models_details)} model details from Ollama.")
+                    for model_detail in ollama_models_details:
+                        # Extract the model name (e.g., "llama3", "mistral")
+                        # The key for model name in the returned dicts is 'model_name'
+                        ollama_model_name_only = model_detail.get("model_name")
+                        if not ollama_model_name_only:
+                            logger.warning(f"Skipping an Ollama model entry due to missing 'model_name': {model_detail}")
+                            continue
+
+                        full_ollama_id = f"ollama/{ollama_model_name_only}"
+                        display_name = f"Ollama:{ollama_model_name_only}"
+
+                        model_info.append({
+                            "id": full_ollama_id,
+                            "display_name": display_name,
+                            "short_name": ollama_model_name_only,
+                            "requires_subscription": False, # Assumption for self-hosted
+                            "is_available": True      # Assumption for self-hosted
+                        })
+                        fetched_ollama_model_ids.add(full_ollama_id)
+                else:
+                    logger.info("Ollama server returned no models or an empty list.")
+            except Exception as e:
+                logger.warning(f"Could not fetch models from Ollama server at {config.OLLAMA_API_BASE}: {str(e)}")
+
+        # Get all unique full model names from MODEL_NAME_ALIASES for static models
+        all_static_models = set()
+        model_aliases = {} # For resolving display names of static models
         
         for short_name, full_name in MODEL_NAME_ALIASES.items():
-            # Add all unique full model names
-            all_models.add(full_name)
-            
-            # Only include short names that don't match their full names for aliases
-            if short_name != full_name and not short_name.startswith("openai/") and not short_name.startswith("anthropic/") and not short_name.startswith("openrouter/") and not short_name.startswith("xai/"):
-                if full_name not in model_aliases:
+            all_static_models.add(full_name)
+            if short_name != full_name and not short_name.startswith(("openai/", "anthropic/", "openrouter/", "xai/", "ollama/")):
+                if full_name not in model_aliases: # Prioritize first alias if multiple point to same full_name
                     model_aliases[full_name] = short_name
         
-        # Create model info with display names for ALL models
-        model_info = []
-        for model in all_models:
-            if model.startswith("ollama/"):
-                actual_model_name = model.split('/')[-1]
-                display_name = f"Ollama:{actual_model_name}"
-            else:
-                # Use existing logic for other models (aliases or derived from ID)
-                display_name = model_aliases.get(model, model.split('/')[-1] if '/' in model else model)
+        # Process statically defined models (from MODEL_NAME_ALIASES)
+        # Filter out any that were already added from the dynamic Ollama fetch
+        for model_id_from_static_config in all_static_models:
+            if model_id_from_static_config in fetched_ollama_model_ids:
+                logger.debug(f"Skipping static model {model_id_from_static_config} as it was already fetched dynamically from Ollama.")
+                continue
+
+            # Logic for models NOT dynamically fetched from Ollama
+            # This handles non-Ollama models and any Ollama models in static config but not on the user's server.
+            display_name = model_aliases.get(model_id_from_static_config, model_id_from_static_config.split('/')[-1] if '/' in model_id_from_static_config else model_id_from_static_config)
             
             # Check if model requires subscription (not in free tier)
-            requires_sub = model not in free_tier_models
+            requires_sub = model_id_from_static_config not in free_tier_models
             
             # Check if model is available with current subscription
-            is_available = model in allowed_models
+            is_available = model_id_from_static_config in allowed_models # Corrected variable name
             
             model_info.append({
-                "id": model,
+                "id": model_id_from_static_config, # Corrected variable name
                 "display_name": display_name,
-                "short_name": model_aliases.get(model),
+                "short_name": model_aliases.get(model_id_from_static_config), # Corrected variable name
                 "requires_subscription": requires_sub,
                 "is_available": is_available
             })
