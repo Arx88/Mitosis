@@ -126,12 +126,12 @@ async def get_sandbox_by_id_safely(client, sandbox_id: str):
         logger.error(f"No project found for sandbox ID: {sandbox_id}")
         raise HTTPException(status_code=404, detail="Sandbox not found - no project owns this sandbox ID")
     
-    # project_id = project_result.data[0]['project_id']
+    project_id = project_result.data[0]['project_id']
     # logger.debug(f"Found project {project_id} for sandbox {sandbox_id}")
     
     try:
         # Get the sandbox
-        sandbox = await get_or_start_sandbox(sandbox_id)
+        sandbox = await get_or_start_sandbox(project_id, client)
         # Extract just the sandbox object from the tuple (sandbox, sandbox_id, sandbox_pass)
         # sandbox = sandbox_tuple[0]
             
@@ -376,7 +376,7 @@ async def ensure_project_sandbox_active(
         
         # Get or start the sandbox
         logger.info(f"Ensuring sandbox is active for project {project_id}")
-        sandbox = await get_or_start_sandbox(sandbox_id)
+        sandbox = await get_or_start_sandbox(project_id, client)
         
         logger.info(f"Successfully ensured sandbox {sandbox_id} is active for project {project_id}")
         
