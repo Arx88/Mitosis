@@ -381,8 +381,14 @@ def collect_llm_api_keys():
 
     # Collect API keys for selected providers
     api_keys = {}
-    model_info = {}
+    # model_info = {} # model_info was used to store a single 'default_model', this will be handled differently.
     
+    # Store chosen models for each provider temporarily
+    chosen_anthropic_model = None
+    chosen_openai_model = None
+    chosen_ollama_model = None
+    chosen_openrouter_model = None
+
     # Model aliases for reference
     model_aliases = {
         'OPENAI': ['openai/gpt-4o', 'openai/gpt-4o-mini'],
@@ -398,16 +404,35 @@ def collect_llm_api_keys():
             print_info("Ollama selected. Ensure your Ollama server is running.")
             print_info("OLLAMA_API_BASE will be set in backend/.env (defaults to http://localhost:11434 if not otherwise specified by your environment).")
             api_keys['OLLAMA_ENABLED'] = True # Mark Ollama as selected
-            # No API key needed for Ollama, but we might want to set a default model if it's the only one.
-            if 'default_model' not in model_info and len(selected_providers) == 1:
-                 model_info['default_model'] = 'ollama_chat/llama3.1'
-                 print_info(f"Default model set to {model_info['default_model']} as Ollama is the only provider.")
-            elif 'OLLAMA' in selected_providers and 'default_model' not in model_info:
-                # If ollama is selected with others, but no default is yet set (e.g. user skipped other prompts)
-                # we can prompt or set a default here. For now, let existing logic handle if others are picked.
-                # If only Ollama is picked, it's handled above.
-                pass
 
+            print(f"\n{Colors.CYAN}Recommended Ollama models (ensure these are available in your Ollama server):{Colors.ENDC}")
+            for i, model in enumerate(model_aliases['OLLAMA'], 1):
+                print(f"{Colors.CYAN}[{i}] {Colors.GREEN}{model}{Colors.ENDC}")
+            print(f"{Colors.CYAN}[{len(model_aliases['OLLAMA']) + 1}] {Colors.GREEN}Enter a custom Ollama model ID{Colors.ENDC}")
+
+            ollama_model_choice_input = input(f"Select default Ollama model (1-{len(model_aliases['OLLAMA']) + 1}) or press Enter for '{model_aliases['OLLAMA'][0]}': ").strip()
+
+            if not ollama_model_choice_input:
+                chosen_ollama_model = model_aliases['OLLAMA'][0]
+            elif ollama_model_choice_input.isdigit():
+                choice_num = int(ollama_model_choice_input)
+                if 1 <= choice_num <= len(model_aliases['OLLAMA']):
+                    chosen_ollama_model = model_aliases['OLLAMA'][choice_num - 1]
+                elif choice_num == len(model_aliases['OLLAMA']) + 1:
+                    custom_model_id = input("Enter your custom Ollama model ID (e.g., ollama_chat/my-custom-model): ").strip()
+                    if custom_model_id: # Basic validation: not empty
+                        chosen_ollama_model = custom_model_id
+                    else:
+                        chosen_ollama_model = model_aliases['OLLAMA'][0]
+                        print_warning(f"No custom model entered, using default: {chosen_ollama_model}")
+                else:
+                    chosen_ollama_model = model_aliases['OLLAMA'][0]
+                    print_warning(f"Invalid selection, using default: {chosen_ollama_model}")
+            else: # User might have typed a model name directly
+                chosen_ollama_model = ollama_model_choice_input
+
+            api_keys['OLLAMA_DEFAULT_MODEL'] = chosen_ollama_model # Store it temporarily
+            print_info(f"Selected Ollama model: {chosen_ollama_model}")
 
         elif provider == 'OPENAI':
             while True:
@@ -420,14 +445,15 @@ def collect_llm_api_keys():
                     for i, model in enumerate(model_aliases['OPENAI'], 1):
                         print(f"{Colors.CYAN}[{i}] {Colors.GREEN}{model}{Colors.ENDC}")
                     
-                    model_choice = input("Select default model (1-4) or press Enter for gpt-4o: ").strip()
-                    if not model_choice:
-                        model_info['default_model'] = 'openai/gpt-4o'
-                    elif model_choice.isdigit() and 1 <= int(model_choice) <= len(model_aliases['OPENAI']):
-                        model_info['default_model'] = model_aliases['OPENAI'][int(model_choice) - 1]
+                    model_choice_input = input(f"Select OpenAI model (1-{len(model_aliases['OPENAI'])}) or press Enter for '{model_aliases['OPENAI'][0]}': ").strip()
+                    if not model_choice_input:
+                        chosen_openai_model = model_aliases['OPENAI'][0]
+                    elif model_choice_input.isdigit() and 1 <= int(model_choice_input) <= len(model_aliases['OPENAI']):
+                        chosen_openai_model = model_aliases['OPENAI'][int(model_choice_input) - 1]
                     else:
-                        model_info['default_model'] = 'openai/gpt-4o'
-                        print_warning(f"Invalid selection, using default: openai/gpt-4o")
+                        chosen_openai_model = model_aliases['OPENAI'][0]
+                        print_warning(f"Invalid selection, using default: {chosen_openai_model}")
+                    print_info(f"Selected OpenAI model: {chosen_openai_model}")
                     break
                 print_error("Invalid API key format. It should be at least 10 characters long.")
         
@@ -442,14 +468,15 @@ def collect_llm_api_keys():
                     for i, model in enumerate(model_aliases['ANTHROPIC'], 1):
                         print(f"{Colors.CYAN}[{i}] {Colors.GREEN}{model}{Colors.ENDC}")
                     
-                    model_choice = input("Select default model (1-3) or press Enter for claude-3-7-sonnet: ").strip()
-                    if not model_choice or model_choice == '1':
-                        model_info['default_model'] = 'anthropic/claude-3-7-sonnet-latest'
-                    elif model_choice.isdigit() and 1 <= int(model_choice) <= len(model_aliases['ANTHROPIC']):
-                        model_info['default_model'] = model_aliases['ANTHROPIC'][int(model_choice) - 1]
+                    model_choice_input = input(f"Select Anthropic model (1-{len(model_aliases['ANTHROPIC'])}) or press Enter for '{model_aliases['ANTHROPIC'][0]}': ").strip()
+                    if not model_choice_input or model_choice_input == '1':
+                        chosen_anthropic_model = model_aliases['ANTHROPIC'][0]
+                    elif model_choice_input.isdigit() and 1 <= int(model_choice_input) <= len(model_aliases['ANTHROPIC']):
+                        chosen_anthropic_model = model_aliases['ANTHROPIC'][int(model_choice_input) - 1]
                     else:
-                        model_info['default_model'] = 'anthropic/claude-3-7-sonnet-latest'
-                        print_warning(f"Invalid selection, using default: anthropic/claude-3-7-sonnet-latest")
+                        chosen_anthropic_model = model_aliases['ANTHROPIC'][0]
+                        print_warning(f"Invalid selection, using default: {chosen_anthropic_model}")
+                    print_info(f"Selected Anthropic model: {chosen_anthropic_model}")
                     break
                 print_error("Invalid API key format. It should be at least 10 characters long.")
         
@@ -465,52 +492,55 @@ def collect_llm_api_keys():
                     for i, model in enumerate(model_aliases['OPENROUTER'], 1):
                         print(f"{Colors.CYAN}[{i}] {Colors.GREEN}{model}{Colors.ENDC}")
                     
-                    model_choice = input("Select default model (1-3) or press Enter for gemini-2.5-flash: ").strip()
-                    if not model_choice or model_choice == '1':
-                        model_info['default_model'] = 'openrouter/google/gemini-2.5-flash-preview'
-                    elif model_choice.isdigit() and 1 <= int(model_choice) <= len(model_aliases['OPENROUTER']):
-                        model_info['default_model'] = model_aliases['OPENROUTER'][int(model_choice) - 1]
+                    model_choice_input = input(f"Select OpenRouter model (1-{len(model_aliases['OPENROUTER'])}) or press Enter for '{model_aliases['OPENROUTER'][0]}': ").strip()
+                    if not model_choice_input or model_choice_input == '1':
+                        chosen_openrouter_model = model_aliases['OPENROUTER'][0]
+                    elif model_choice_input.isdigit() and 1 <= int(model_choice_input) <= len(model_aliases['OPENROUTER']):
+                        chosen_openrouter_model = model_aliases['OPENROUTER'][int(model_choice_input) - 1]
                     else:
-                        model_info['default_model'] = 'openrouter/google/gemini-2.5-flash-preview'
-                        print_warning(f"Invalid selection, using default: openrouter/google/gemini-2.5-flash-preview")
+                        chosen_openrouter_model = model_aliases['OPENROUTER'][0]
+                        print_warning(f"Invalid selection, using default: {chosen_openrouter_model}")
+                    print_info(f"Selected OpenRouter model: {chosen_openrouter_model}")
                     break
                 print_error("Invalid API key format. It should be at least 10 characters long.")
         
-    # If no default model has been set, check which provider was selected and set an appropriate default
-    if 'default_model' not in model_info:
-        if 'ANTHROPIC_API_KEY' in api_keys: # Anthropic is high priority
-            model_info['default_model'] = 'anthropic/claude-3-7-sonnet-latest'
-        elif 'OPENAI_API_KEY' in api_keys: # OpenAI is next
-            model_info['default_model'] = 'openai/gpt-4o'
-        elif 'OPENROUTER_API_KEY' in api_keys: # OpenRouter after that
-            model_info['default_model'] = 'openrouter/google/gemini-2.5-flash-preview'
-        elif 'OLLAMA_ENABLED' in api_keys and len(selected_providers) == 1 : # Ollama if it's the *only* one and no other default was set
-            model_info['default_model'] = 'ollama_chat/llama3.1'
-        elif not selected_providers: # Should not happen due to check above
-             print_error("No providers selected, cannot set a default model.")
-             # Potentially exit or raise error
-        else: # Fallback if somehow no default is set, pick the first selected provider's default
-            first_provider = selected_providers[0]
-            if first_provider == 'OLLAMA':
-                 model_info['default_model'] = model_aliases['OLLAMA'][0]
-            elif first_provider == 'ANTHROPIC':
-                 model_info['default_model'] = model_aliases['ANTHROPIC'][0]
-            elif first_provider == 'OPENAI':
-                 model_info['default_model'] = model_aliases['OPENAI'][0]
-            elif first_provider == 'OPENROUTER':
-                 model_info['default_model'] = model_aliases['OPENROUTER'][0]
-            print_warning(f"Default model selection logic fallback, using: {model_info.get('default_model', 'not set')}")
+    # Determine the final MODEL_TO_USE based on priority and user selections
+    final_default_model = None
 
-    if 'default_model' in model_info:
-        print_success(f"Using {model_info['default_model']} as the default model")
+    if chosen_anthropic_model:
+        final_default_model = chosen_anthropic_model
+    elif chosen_openai_model:
+        final_default_model = chosen_openai_model
+    elif chosen_ollama_model: # This is from api_keys['OLLAMA_DEFAULT_MODEL'] which was set if Ollama was chosen
+        final_default_model = chosen_ollama_model
+    elif chosen_openrouter_model:
+        final_default_model = chosen_openrouter_model
     else:
-        # This case should be rare given the logic above.
-        print_error("Could not determine a default model. Please check your selections.")
-        # Potentially ask user to pick one manually here or set a hardcoded fallback.
-        # For now, we'll let it proceed, but `MODEL_TO_USE` might be missing in .env
-    
-    # Add the default model to the API keys dictionary
-    api_keys['MODEL_TO_USE'] = model_info['default_model']
+        # Fallback if no specific model was chosen for any *selected* provider,
+        # but providers *were* selected. Pick first from aliases of selected providers based on priority.
+        if 'ANTHROPIC_API_KEY' in api_keys:
+            final_default_model = model_aliases['ANTHROPIC'][0]
+        elif 'OPENAI_API_KEY' in api_keys:
+            final_default_model = model_aliases['OPENAI'][0]
+        elif 'OLLAMA_ENABLED' in api_keys: # Check if Ollama was selected at all
+             # api_keys['OLLAMA_DEFAULT_MODEL'] should have been set if Ollama was selected.
+             # This is a fallback if it somehow wasn't (e.g. user skipped prompt for Ollama).
+            final_default_model = api_keys.get('OLLAMA_DEFAULT_MODEL', model_aliases['OLLAMA'][0])
+        elif 'OPENROUTER_API_KEY' in api_keys:
+            final_default_model = model_aliases['OPENROUTER'][0]
+
+    if final_default_model:
+        print_success(f"Using {final_default_model} as the default model for MODEL_TO_USE")
+        api_keys['MODEL_TO_USE'] = final_default_model
+    else:
+        # This case should be rare given the selection requirement at the beginning.
+        print_error("Could not determine a default model. This should not happen if at least one provider is selected.")
+        # As a last resort, if this state is reached:
+        api_keys['MODEL_TO_USE'] = 'anthropic/claude-3-7-sonnet-latest' # A failsafe default
+        print_warning(f"Setting a failsafe default model: {api_keys['MODEL_TO_USE']}. Please review your .env file.")
+
+    # Remove OLLAMA_DEFAULT_MODEL from api_keys if it exists, as it's temporary for this function's logic
+    api_keys.pop('OLLAMA_DEFAULT_MODEL', None)
     
     return api_keys
 
