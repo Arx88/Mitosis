@@ -64,16 +64,94 @@ def save_env_data(env_data):
         json.dump(env_data, f)
 
 def load_env_data():
-    if os.path.exists(ENV_DATA_FILE):
-        with open(ENV_DATA_FILE, 'r') as f:
-            return json.load(f)
-    return {
+    """
+    Loads environment data from .setup_env.json if it exists.
+    Handles potential old formats and ensures the data structure is current.
+    Returns a dictionary with the loaded or default environment settings.
+    """
+    default_env_data = {
         'supabase': {},
-        'daytona': {},
+        'daytona': {'SETUP_TYPE': None}, # Ensures SETUP_TYPE is always available for daytona
         'llm': {},
         'search': {},
         'rapidapi': {}
     }
+    if os.path.exists(ENV_DATA_FILE):
+        try:
+            with open(ENV_DATA_FILE, 'r') as f:
+                loaded_data = json.load(f)
+
+                # Ensure all top-level keys from default_env_data exist in loaded_data.
+                # This handles cases where new sections were added to the setup.
+                for key, default_value in default_env_data.items():
+                    if key not in loaded_data:
+                        loaded_data[key] = default_value
+
+                # Specifically check and upgrade 'daytona' section for compatibility.
+                # This ensures 'SETUP_TYPE' exists, which is crucial for new logic.
+                daytona_data = loaded_data.get('daytona')
+                if not isinstance(daytona_data, dict) or 'SETUP_TYPE' not in daytona_data:
+                    old_api_key = None
+                    # Try to preserve an old API key if daytona_data was a dict but lacked SETUP_TYPE
+                    if isinstance(daytona_data, dict):
+                         old_api_key = daytona_data.get('DAYTONA_API_KEY')
+
+                    # Reset daytona to the default structure, then try to populate it.
+                    loaded_data['daytona'] = {'SETUP_TYPE': None}
+                    if old_api_key:
+                         loaded_data['daytona']['DAYTONA_API_KEY'] = old_api_key
+                         # If an old API key was found, it's reasonable to assume the setup type was 'daytona'.
+                         # This helps migrate users from older .setup_env.json formats.
+                         loaded_data['daytona']['SETUP_TYPE'] = 'daytona'
+                return loaded_data
+        except json.JSONDecodeError:
+            print_warning(f"Error decoding {ENV_DATA_FILE}. File might be corrupted. Starting with a fresh configuration.")
+            return default_env_data
+    return default_env_data
+
+def print_config_safely(config_dict):
+    """Prints configuration data, masking sensitive values."""
+    sensitive_keywords = ['KEY', 'TOKEN', 'SECRET', 'PASSWORD']
+    for key, value in config_dict.items():
+        is_sensitive = any(keyword in key.upper() for keyword in sensitive_keywords)
+        if is_sensitive and isinstance(value, str) and len(value) > 8:
+            masked_value = f"{value[:4]}...{value[-4:]}"
+            print(f"  {key}: {masked_value}")
+        elif value is not None: # Do not print None values, but print empty strings if they are actual config
+            print(f"  {key}: {value}")
+
+def prompt_to_reuse_config(config_name, config_data, specific_check_key=None):
+    """
+    Prompts the user to reuse existing configuration.
+    Returns True if the user wants to reuse, False otherwise.
+    """
+    has_data = False
+    if config_data:
+        if specific_check_key: # e.g. 'SETUP_TYPE' for daytona, 'MODEL_TO_USE' for llm
+            if config_data.get(specific_check_key):
+                has_data = True
+        # For dicts, check if any value is truthy, or if it's a non-empty dict for simple cases like supabase
+        elif isinstance(config_data, dict) and any(config_data.values()):
+            has_data = True
+        # For rapidapi, even an empty string for RAPID_API_KEY means it was processed.
+        elif config_name == "RapidAPI" and 'RAPID_API_KEY' in config_data:
+             has_data = True
+
+
+    if has_data:
+        print_info(f"Found saved {config_name} settings in {Colors.YELLOW}{ENV_DATA_FILE}{Colors.ENDC}:")
+        print_config_safely(config_data) # Displays the configuration, masking sensitive parts.
+        while True:
+            # Clearer prompt for reusing settings
+            choice = input(f"Do you want to use these saved {config_name} settings? (yes/no) [default: yes]: ").lower().strip()
+            if choice in ['yes', 'y', '']:
+                print_success(f"Using saved {config_name} settings.")
+                return True
+            elif choice in ['no', 'n']:
+                return False
+            else:
+                print_error("Invalid input. Please enter 'yes' or 'no'.")
+    return False # No data or user chose not to reuse
 
 
 def print_step(step_num, total_steps, step_name):
@@ -231,28 +309,85 @@ def collect_supabase_info():
     }
 
 def collect_daytona_info():
-    """Collect Daytona API key"""
-    print_info("You'll need to create a Daytona account before continuing")
-    print_info("Visit https://app.daytona.io/ to create one")
-    print_info("Then, generate an API key from 'Keys' menu")
-    print_info("After that, go to Images (https://app.daytona.io/dashboard/images)")
-    print_info("Click '+ Create Image'")
-    print_info(f"Enter 'kortix/suna:0.1.2.8' as the image name")
-    print_info(f"Set '/usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf' as the Entrypoint")
+    """Collects information for the agent execution sandbox, allowing user to choose between Daytona (cloud) or local Docker."""
+    print_info("The agent requires a sandbox environment to execute code safely.")
+    print_info("You have two options for this sandbox:")
+    print(f"{Colors.CYAN}[1] {Colors.GREEN}Daytona Sandbox{Colors.ENDC}")
+    print(f"    - Uses a cloud-based service ({Colors.UNDERLINE}https://daytona.io{Colors.ENDC}).")
+    print(f"    - Requires a Daytona account and API key.")
+    print(f"    - Recommended for ease of use if you have a Daytona account.\n")
+    print(f"{Colors.CYAN}[2] {Colors.GREEN}Local Docker Sandbox{Colors.ENDC}")
+    print(f"    - Uses Docker running on your own machine.")
+    print(f"    - Requires Docker to be installed and running.")
+    print(f"    - Good for local development if you prefer not to use a cloud service for the sandbox.\n")
 
-    input("Press Enter to continue once you've completed these steps...")
-    
     while True:
-        daytona_api_key = input("Enter your Daytona API key: ")
-        if validate_api_key(daytona_api_key):
+        choice = input("Choose your sandbox environment (1 for Daytona, 2 for Local Docker): ")
+        if choice in ["1", "2"]:
             break
-        print_error("Invalid API key format. It should be at least 10 characters long.")
-    
-    return {
-        'DAYTONA_API_KEY': daytona_api_key,
-        'DAYTONA_SERVER_URL': "https://app.daytona.io/api",
-        'DAYTONA_TARGET': "us",
-    }
+        print_error("Invalid selection. Please enter '1' for Daytona or '2' for Local Docker.")
+
+    # Branching based on user's choice for sandbox type
+    if choice == "1": # User chose Daytona
+        print_info("Configuring Suna to use Daytona for the agent sandbox.")
+        print_info("You'll need a Daytona account and an API key.")
+        print_info(f"Visit {Colors.UNDERLINE}https://app.daytona.io/{Colors.ENDC} to create an account or get your API key.")
+        print_info("Additionally, ensure you have the Suna agent image configured in Daytona:")
+        print_info(f"  - Image Name: {Colors.YELLOW}kortix/suna:0.1.2.8{Colors.ENDC}")
+        print_info(f"  - Entrypoint: {Colors.YELLOW}/usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf{Colors.ENDC}")
+        print_info(f"  (These details can be found in {Colors.YELLOW}docs/SELF-HOSTING.md{Colors.ENDC})\n")
+
+        input("Press Enter to continue once you have your Daytona API key and have configured the image...")
+
+        while True:
+            daytona_api_key = input("Enter your Daytona API key: ")
+            if validate_api_key(daytona_api_key):
+                break
+            print_error("Invalid API key format. It should be at least 10 characters long.")
+
+        return {
+            'SETUP_TYPE': 'daytona', # Explicitly set type for clarity in .env and logic
+            'DAYTONA_API_KEY': daytona_api_key,
+            'DAYTONA_SERVER_URL': "https://app.daytona.io/api", # Default Daytona server URL
+            'DAYTONA_TARGET': "us", # Default Daytona target
+        }
+    else: # User chose Local Docker
+        print_info("Configuring Suna to use a local Docker container for the agent sandbox.")
+        print_info(f"Please ensure Docker is installed and running on your system.")
+        print_info(f"The sandbox will use the {Colors.YELLOW}kortix/suna:0.1.2.8{Colors.ENDC} Docker image.")
+        return {'SETUP_TYPE': 'local_docker'}
+
+def collect_llm_api_keys():
+# Prompts for Daytona configuration if chosen by the user.
+        # This includes API key and instructions for setting up the required Docker image in Daytona.
+        print_info("Configuring Suna to use Daytona for the agent sandbox.")
+        print_info("You'll need a Daytona account and an API key.")
+        print_info(f"Visit {Colors.UNDERLINE}https://app.daytona.io/{Colors.ENDC} to create an account or get your API key.")
+        print_info("Additionally, ensure you have the Suna agent image configured in Daytona:")
+        print_info(f"  - Image Name: {Colors.YELLOW}kortix/suna:0.1.2.8{Colors.ENDC}")
+        print_info(f"  - Entrypoint: {Colors.YELLOW}/usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf{Colors.ENDC}")
+        print_info(f"  (These details can be found in {Colors.YELLOW}docs/SELF-HOSTING.md{Colors.ENDC})\n")
+
+        input("Press Enter to continue once you have your Daytona API key and have configured the image...")
+
+        while True:
+            daytona_api_key = input("Enter your Daytona API key: ")
+            if validate_api_key(daytona_api_key): # Basic validation for the API key format
+                break
+            print_error("Invalid API key format. It should be at least 10 characters long.")
+
+        return {
+            'SETUP_TYPE': 'daytona', # Explicitly set type for clarity in .env and logic
+            'DAYTONA_API_KEY': daytona_api_key,
+            'DAYTONA_SERVER_URL': "https://app.daytona.io/api", # Default Daytona server URL
+            'DAYTONA_TARGET': "us", # Default Daytona target
+        }
+    else: # User chose Local Docker
+        # Confirms local Docker setup and reminds user to have Docker running.
+        print_info("Configuring Suna to use a local Docker container for the agent sandbox.")
+        print_info(f"Please ensure Docker is installed and running on your system.")
+        print_info(f"The sandbox will use the {Colors.YELLOW}kortix/suna:0.1.2.8{Colors.ENDC} Docker image.")
+        return {'SETUP_TYPE': 'local_docker'} # Only SETUP_TYPE is needed for local Docker
 
 def collect_llm_api_keys():
     """Collect LLM API keys for various providers"""
@@ -545,11 +680,30 @@ ENV_MODE=local
     env_content += f"FIRECRAWL_API_KEY={firecrawl_key}\n"
     env_content += f"FIRECRAWL_URL={firecrawl_url}\n"
     
-    # Daytona section
+    # Sandbox container provider section
+    # The SANDBOX_TYPE variable determines whether the agent executes code
+    # in a Daytona cloud sandbox or a locally running Docker container.
+    # This is based on the user's choice in the `collect_daytona_info` step.
     env_content += "\n# Sandbox container provider:\n"
-    for key, value in env_vars['daytona'].items():
-        env_content += f"{key}={value}\n"
-    
+    daytona_config = env_vars.get('daytona', {}) # Get the 'daytona' dictionary, or empty if not set
+    setup_type = daytona_config.get('SETUP_TYPE') # Get the chosen setup type ('daytona' or 'local_docker')
+
+    if setup_type == 'daytona':
+        # If Daytona is chosen, set SANDBOX_TYPE and related Daytona variables
+        env_content += "SANDBOX_TYPE=daytona\n"
+        env_content += f"DAYTONA_API_KEY={daytona_config.get('DAYTONA_API_KEY', '')}\n"
+        env_content += f"DAYTONA_SERVER_URL={daytona_config.get('DAYTONA_SERVER_URL', 'https://app.daytona.io/api')}\n" # Default URL
+        env_content += f"DAYTONA_TARGET={daytona_config.get('DAYTONA_TARGET', 'us')}\n" # Default target
+    elif setup_type == 'local_docker':
+        # If local Docker is chosen, only SANDBOX_TYPE is needed
+        env_content += "SANDBOX_TYPE=local_docker\n"
+    else:
+        # Fallback if SETUP_TYPE is somehow not set or has an unexpected value.
+        # Defaulting to 'local_docker' is a safe option, assuming Docker is available.
+        # This situation should ideally be prevented by earlier validation/collection steps.
+        print_warning(f"Sandbox SETUP_TYPE is undefined or invalid ('{setup_type}'). Defaulting to 'local_docker'.")
+        env_content += "SANDBOX_TYPE=local_docker\n"
+
     # Add next public URL at the end
     env_content += f"NEXT_PUBLIC_URL=http://localhost:3000\n"
     
@@ -811,10 +965,19 @@ def final_instructions(use_docker=True, env_vars=None):
     # Display LLM configuration info if available
     if env_vars and 'llm' in env_vars and 'MODEL_TO_USE' in env_vars['llm']:
         default_model = env_vars['llm']['MODEL_TO_USE']
-        print_info(f"Suna is configured to use {Colors.GREEN}{default_model}{Colors.ENDC} as the default LLM model")
+        print_info(f"Suna is configured to use {Colors.GREEN}{default_model}{Colors.ENDC} as the default LLM model.")
     
+    # Display sandbox type if available
+    if env_vars and 'daytona' in env_vars and 'SETUP_TYPE' in env_vars['daytona']:
+        sandbox_type = env_vars['daytona']['SETUP_TYPE']
+        if sandbox_type == 'daytona':
+            print_info(f"Agent sandbox is configured to use {Colors.GREEN}Daytona (cloud sandbox){Colors.ENDC}.")
+        elif sandbox_type == 'local_docker':
+            print_info(f"Agent sandbox is configured to use {Colors.GREEN}Local Docker{Colors.ENDC}.")
+        print_info(f"Refer to {Colors.YELLOW}docs/SELF-HOSTING.md{Colors.ENDC} for more details on your setup.")
+
     if use_docker:
-        print_info("Your Suna instance is now running!")
+        print_info("Your Suna instance (backend, frontend, etc.) is now running via Docker Compose!")
         print_info("Access it at: http://localhost:3000")
         print_info("Create an account using Supabase authentication to start using Suna")
         print("\nUseful Docker commands:")
@@ -853,74 +1016,124 @@ def main():
     current_step = load_progress() + 1
 
     print_banner()
-    print("This wizard will guide you through setting up Suna, an open-source generalist AI agent.\n")
+    # General introduction to the setup wizard.
+    print(f"Welcome to the Suna Setup Wizard!")
+    print("This script will guide you through configuring the Suna application.")
+    print(f"It will help you set up API keys, database connections, and other essential settings.")
+    print(f"You can resume an interrupted setup by running this script again.\n")
 
+    # Load existing environment data or defaults. This supports resuming setup.
     env_vars = load_env_data()
 
+    # Step 1: Check system requirements (Docker, Git, Python, Node, etc.)
     if current_step <= 1:
-        print_step(current_step, total_steps, "Checking requirements")
-        check_requirements()
-        check_docker_running()
-        if not check_suna_directory():
+        print_step(current_step, total_steps, "Checking System Requirements")
+        if not check_requirements(): # Exits if requirements are not met.
+            sys.exit(1)
+        if not check_docker_running(): # Exits if Docker is not running.
+             sys.exit(1)
+        if not check_suna_directory(): # Exits if not in the correct Suna directory.
             print_error("This setup script must be run from the Suna repository root directory.")
             sys.exit(1)
-        save_progress(current_step)
+        save_progress(current_step) # Save progress after successful completion of this step.
         current_step += 1
 
+    # Step 2: Collect Supabase information (database and authentication)
     if current_step <= 2:
-        print_step(current_step, total_steps, "Collecting Supabase information")
-        env_vars['supabase'] = collect_supabase_info()
-        os.environ['SUPABASE_URL'] = env_vars['supabase']['SUPABASE_URL']
-        save_env_data(env_vars)
+        print_step(current_step, total_steps, "Collecting Supabase Information (Database & Auth)")
+        # Prompt user to reuse existing Supabase config if available.
+        if not prompt_to_reuse_config("Supabase", env_vars.get('supabase'), specific_check_key='SUPABASE_URL'):
+            env_vars['supabase'] = collect_supabase_info()
+
+        # Critical check: SUPABASE_URL is required for subsequent Supabase CLI operations.
+        if env_vars.get('supabase', {}).get('SUPABASE_URL'):
+             os.environ['SUPABASE_URL'] = env_vars['supabase']['SUPABASE_URL'] # Set for Supabase CLI
+        else:
+            print_error("Supabase URL is missing. This is critical for the setup to continue. Please ensure it's provided.")
+            sys.exit(1) # Exit if critical information is missing.
+        save_env_data(env_vars) # Save the collected/confirmed data.
         save_progress(current_step)
         current_step += 1
 
+    # Step 3: Collect Agent Sandbox information (Daytona or Local Docker)
     if current_step <= 3:
-        print_step(current_step, total_steps, "Collecting Daytona information")
-        env_vars['daytona'] = collect_daytona_info()
+        print_step(current_step, total_steps, "Configuring Agent Execution Sandbox")
+        daytona_data = env_vars.get('daytona', {})
+        reuse_sandbox_config = False
+        # Determine if there's a reusable configuration for Daytona or Local Docker.
+        if daytona_data.get('SETUP_TYPE') == 'daytona' and daytona_data.get('DAYTONA_API_KEY'):
+            reuse_sandbox_config = prompt_to_reuse_config("Daytona Sandbox", daytona_data, specific_check_key='DAYTONA_API_KEY')
+        elif daytona_data.get('SETUP_TYPE') == 'local_docker':
+            reuse_sandbox_config = prompt_to_reuse_config("Local Docker Sandbox", daytona_data, specific_check_key='SETUP_TYPE')
+
+        if not reuse_sandbox_config:
+            env_vars['daytona'] = collect_daytona_info() # Collect sandbox info if not reused.
+
         save_env_data(env_vars)
         save_progress(current_step)
         current_step += 1
 
+    # Step 4: Collect LLM (Large Language Model) API keys
     if current_step <= 4:
-        print_step(current_step, total_steps, "Collecting LLM API keys")
-        env_vars['llm'] = collect_llm_api_keys()
+        print_step(current_step, total_steps, "Collecting LLM API Keys")
+        if not prompt_to_reuse_config("LLM API", env_vars.get('llm'), specific_check_key='MODEL_TO_USE'):
+            env_vars['llm'] = collect_llm_api_keys()
         save_env_data(env_vars)
         save_progress(current_step)
         current_step += 1
 
+    # Step 5: Collect Search and Web Scraping API keys (Tavily, Firecrawl)
     if current_step <= 5:
-        print_step(current_step, total_steps, "Collecting search and web scraping API keys")
-        env_vars['search'] = collect_search_api_keys()
+        print_step(current_step, total_steps, "Collecting Search & Web Scraping API Keys")
+        if not prompt_to_reuse_config("Search/WebScraping API", env_vars.get('search'), specific_check_key='TAVILY_API_KEY'):
+            env_vars['search'] = collect_search_api_keys()
         save_env_data(env_vars)
         save_progress(current_step)
         current_step += 1
 
+    # Step 6: Collect RapidAPI key (optional, for additional API services)
     if current_step <= 6:
-        print_step(current_step, total_steps, "Collecting RapidAPI key")
-        env_vars['rapidapi'] = collect_rapidapi_keys()
+        print_step(current_step, total_steps, "Collecting RapidAPI Key (Optional)")
+        if not prompt_to_reuse_config("RapidAPI", env_vars.get('rapidapi'), specific_check_key='RAPID_API_KEY'):
+            env_vars['rapidapi'] = collect_rapidapi_keys()
         save_env_data(env_vars)
         save_progress(current_step)
         current_step += 1
 
+    # Step 7: Setup Supabase (database migrations)
     if current_step <= 7:
-        print_step(current_step, total_steps, "Setting up Supabase")
+        print_step(current_step, total_steps, "Setting up Supabase Database (Migrations)")
+        # This step involves running Supabase CLI commands to prepare the database schema.
         setup_supabase()
         save_progress(current_step)
         current_step += 1
 
+    # Step 8: Install dependencies, configure .env files, and start Suna services
     if current_step <= 8:
-        print_step(current_step, total_steps, "Installing dependencies")
-        install_dependencies()
-        print_info("Configuring environment files...")
+        print_step(current_step, total_steps, "Installing Dependencies & Finalizing Setup")
+        install_dependencies() # Installs frontend (npm) and backend (poetry) dependencies.
+
+        print_info("Configuring Suna environment files (.env files)...")
+        # Initial configuration assuming Docker Compose will be used for Suna services.
+        # This sets Redis/RabbitMQ hostnames to service names (e.g., 'redis', 'rabbitmq').
         configure_backend_env(env_vars, True)
         configure_frontend_env(env_vars, True)
-        print_step(current_step, total_steps, "Starting Suna")
-        use_docker = start_suna()
-        if not use_docker:
-            configure_backend_env(env_vars, use_docker)
-            configure_frontend_env(env_vars, use_docker)
-        final_instructions(use_docker, env_vars)
+
+        print_step(current_step, total_steps, "Starting Suna Services")
+        # start_suna() asks the user if they want to use Docker Compose or start manually.
+        # It returns True if Docker Compose is chosen for Suna services, False for manual.
+        use_docker_for_suna_services = start_suna()
+
+        # If the user chose manual startup for Suna services (backend, frontend, worker),
+        # the .env files need to be reconfigured for localhost Redis/RabbitMQ.
+        if not use_docker_for_suna_services:
+            print_info("Re-configuring environment files for manual startup (Redis/RabbitMQ on localhost)...")
+            configure_backend_env(env_vars, False) # Pass False to set Redis/RabbitMQ to localhost
+            configure_frontend_env(env_vars, False) # Though this currently doesn't change for frontend
+
+        final_instructions(use_docker_for_suna_services, env_vars)
+
+        # Cleanup progress and saved environment data file upon successful completion.
         clear_progress()
         if os.path.exists(ENV_DATA_FILE):
             os.remove(ENV_DATA_FILE)
@@ -929,5 +1142,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\nSetup interrupted. You can resume setup anytime by running this script again.")
+        # Handle Ctrl+C gracefully, allowing user to resume later.
+        print(f"\n\n{Colors.YELLOW}Setup interrupted by user (Ctrl+C).{Colors.ENDC}")
+        print("You can resume setup anytime by running this script again.")
         sys.exit(1)
