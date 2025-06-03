@@ -2,7 +2,7 @@ from daytona_sdk import Daytona, DaytonaConfig, CreateSandboxParams, Sandbox, Se
 from daytona_api_client.models.workspace_state import WorkspaceState
 from dotenv import load_dotenv
 from utils.logger import logger
-from utils.config import config
+from utils.config import config, EnvMode # Added EnvMode
 from utils.config import Configuration
 
 class DaytonaNotConfiguredError(Exception):
@@ -47,9 +47,14 @@ else:
 async def get_or_start_sandbox(sandbox_id: str):
     """Retrieve a sandbox by ID, check its state, and start it if needed."""
     
+    global daytona
     if daytona is None:
-        logger.error("Daytona client is not configured. Cannot get or start sandbox.")
-        raise DaytonaNotConfiguredError("Daytona client is not configured. Please check API key and server URL in environment variables.")
+        if config.ENV_MODE == EnvMode.LOCAL:
+            logger.warning(f"Daytona client not configured. Skipping get_or_start_sandbox for sandbox ID {sandbox_id} in local mode.")
+            return None
+        else:
+            logger.error("Daytona client is not configured. Cannot get or start sandbox.")
+            raise DaytonaNotConfiguredError("Daytona client is not configured. Please check API key and server URL in environment variables.")
 
     logger.info(f"Getting or starting sandbox with ID: {sandbox_id}")
     
@@ -104,9 +109,14 @@ def start_supervisord_session(sandbox: Sandbox):
 def create_sandbox(password: str, project_id: str = None):
     """Create a new sandbox with all required services configured and running."""
     
+    global daytona
     if daytona is None:
-        logger.error("Daytona client is not configured. Cannot create sandbox.")
-        raise DaytonaNotConfiguredError("Daytona client is not configured. Please check API key and server URL in environment variables.")
+        if config.ENV_MODE == EnvMode.LOCAL:
+            logger.warning("Daytona client not configured. Skipping sandbox creation for local mode.")
+            return None
+        else:
+            logger.error("Daytona client is not configured. Cannot create sandbox.")
+            raise DaytonaNotConfiguredError("Daytona client is not configured. Please check API key and server URL in environment variables.")
 
     logger.debug("Creating new Daytona sandbox environment")
     logger.debug("Configuring sandbox with browser-use image and environment variables")
@@ -153,9 +163,14 @@ def create_sandbox(password: str, project_id: str = None):
 async def delete_sandbox(sandbox_id: str):
     """Delete a sandbox by its ID."""
 
+    global daytona
     if daytona is None:
-        logger.error("Daytona client is not configured. Cannot delete sandbox.")
-        raise DaytonaNotConfiguredError("Daytona client is not configured. Please check API key and server URL in environment variables.")
+        if config.ENV_MODE == EnvMode.LOCAL:
+            logger.warning(f"Daytona client not configured. Skipping delete_sandbox for sandbox ID {sandbox_id} in local mode.")
+            return False
+        else:
+            logger.error("Daytona client is not configured. Cannot delete sandbox.")
+            raise DaytonaNotConfiguredError("Daytona client is not configured. Please check API key and server URL in environment variables.")
 
     logger.info(f"Deleting sandbox with ID: {sandbox_id}")
     
