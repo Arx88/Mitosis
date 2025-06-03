@@ -2,12 +2,17 @@ from daytona_sdk import Daytona, DaytonaConfig, CreateSandboxParams, Sandbox, Se
 from daytona_api_client.models.workspace_state import WorkspaceState
 from dotenv import load_dotenv
 from utils.logger import logger
-from utils.config import config, Configuration, EnvMode # Re-add EnvMode
+from utils.config import config, Configuration, EnvMode
 from . import local_docker_handler
 import os
+from services.supabase import DBConnection # Added DBConnection import
 from typing import Optional, Dict, List, Any # Added for wrapper classes
 
 class DaytonaNotConfiguredError(Exception):
+    pass
+
+class LocalDockerUnavailableError(Exception):
+    """Custom exception for when the local Docker client cannot be initialized or is unusable."""
     pass
 
 # Wrapper Classes for Local Docker Sandboxes
@@ -111,45 +116,94 @@ if config.DAYTONA_API_KEY and config.DAYTONA_SERVER_URL:
 else:
     logger.warning("Daytona client NOT initialized due to missing DAYTONA_API_KEY or DAYTONA_SERVER_URL.")
 
-async def get_or_start_sandbox(sandbox_id: str):
-    """Retrieve a sandbox by ID, check its state, and start it if needed."""
-    
-    global daytona
-    if daytona is None:
-        if config.ENV_MODE == EnvMode.LOCAL:
-            logger.warning(f"Daytona client not configured. Skipping get_or_start_sandbox for sandbox ID {sandbox_id} in local mode.")
-            return None
-        else:
-            logger.error("Daytona client is not configured. Cannot get or start sandbox.")
-            raise DaytonaNotConfiguredError("Daytona client is not configured. Please check API key and server URL in environment variables.")
+async def get_or_start_sandbox(project_id: str, db_client) -> Optional[Any]:
+    """Retrieve a sandbox by project_id, check its state, and prepare it if needed."""
+    logger.info(f"Getting or starting sandbox for project_id: {project_id}")
 
-    logger.info(f"Getting or starting sandbox with ID: {sandbox_id}")
-    
     try:
-        sandbox = daytona.get_current_sandbox(sandbox_id)
+        project_result = await db_client.table('projects').select('sandbox').eq('project_id', project_id).maybe_single().execute()
+        if not project_result.data or not project_result.data.get('sandbox'):
+            logger.error(f"No project data or sandbox info found for project_id: {project_id}")
+            raise Exception(f"Sandbox information missing for project {project_id}")
+
+        sandbox_info = project_result.data['sandbox']
+        sandbox_type = sandbox_info.get('type')
+        actual_sandbox_id = sandbox_info.get('id')
+
+        if not actual_sandbox_id or not sandbox_type:
+            logger.error(f"Sandbox ID or type missing in DB for project_id: {project_id}. Sandbox info: {sandbox_info}")
+            raise Exception(f"Sandbox ID or type malformed for project {project_id}")
+
+        if sandbox_type == 'local_docker':
+            logger.info(f"Handling as local_docker sandbox: {actual_sandbox_id}")
+            if local_docker_handler.client is None:
+                raise LocalDockerUnavailableError("Local Docker client not initialized.")
+
+            status = local_docker_handler.get_sandbox_container_status(actual_sandbox_id)
+            logger.info(f"Local Docker container {actual_sandbox_id} status: {status}")
+
+            if status == 'running':
+                container_details_for_wrapper = {
+                    'container_id': actual_sandbox_id,
+                    'container_name': sandbox_info.get('name'),
+                    'host_vnc_port': sandbox_info.get('vnc_preview', '').split(':')[-1] if sandbox_info.get('vnc_preview') else None,
+                    'host_web_port': sandbox_info.get('sandbox_url', '').split(':')[-1] if sandbox_info.get('sandbox_url') else None,
+                }
+                if container_details_for_wrapper['host_vnc_port']:
+                    try: container_details_for_wrapper['host_vnc_port'] = int(container_details_for_wrapper['host_vnc_port'])
+                    except ValueError: container_details_for_wrapper['host_vnc_port'] = None
+                if container_details_for_wrapper['host_web_port']:
+                    try: container_details_for_wrapper['host_web_port'] = int(container_details_for_wrapper['host_web_port'])
+                    except ValueError: container_details_for_wrapper['host_web_port'] = None
+
+                return LocalDockerSandboxWrapper(container_details_for_wrapper, sandbox_info.get('pass'))
+            elif status in ['created', 'exited', 'stopped']:
+                logger.info(f"Local Docker container {actual_sandbox_id} is not running ({status}). Attempting to start.")
+                try:
+                    docker_sdk_client = local_docker_handler.client
+                    container_obj = docker_sdk_client.containers.get(actual_sandbox_id)
+                    container_obj.start()
+                    logger.info(f"Successfully started local Docker container {actual_sandbox_id}.")
+                    container_obj.reload()
+                    host_vnc_port_restarted = container_obj.ports.get('6080/tcp')[0]['HostPort'] if container_obj.ports.get('6080/tcp') else None
+                    host_web_port_restarted = container_obj.ports.get('8080/tcp')[0]['HostPort'] if container_obj.ports.get('8080/tcp') else None
+
+                    container_details_restarted = {
+                        'container_id': actual_sandbox_id,
+                        'container_name': sandbox_info.get('name'),
+                        'host_vnc_port': host_vnc_port_restarted,
+                        'host_web_port': host_web_port_restarted,
+                    }
+                    return LocalDockerSandboxWrapper(container_details_restarted, sandbox_info.get('pass'))
+                except Exception as e_start:
+                    logger.error(f"Failed to start local Docker container {actual_sandbox_id}: {e_start}")
+                    return None
+            else:
+                logger.warning(f"Local Docker container {actual_sandbox_id} in unusable state: {status}. Cannot provide sandbox.")
+                return None
+
+        elif sandbox_type == 'daytona':
+            logger.info(f"Handling as Daytona sandbox: {actual_sandbox_id}")
+            global daytona
+            if daytona is None:
+                raise DaytonaNotConfiguredError("Daytona client not configured (SANDBOX_TYPE is 'daytona').")
+
+            daytona_sandbox = daytona.get_current_sandbox(actual_sandbox_id)
+            if daytona_sandbox.instance.state == WorkspaceState.ARCHIVED or daytona_sandbox.instance.state == WorkspaceState.STOPPED:
+                logger.info(f"Daytona sandbox {actual_sandbox_id} is {daytona_sandbox.instance.state}. Starting...")
+                daytona.start(daytona_sandbox)
+                daytona_sandbox = daytona.get_current_sandbox(actual_sandbox_id)
+                start_supervisord_session(daytona_sandbox)
+            logger.info(f"Daytona sandbox {actual_sandbox_id} is ready.")
+            return daytona_sandbox
         
-        # Check if sandbox needs to be started
-        if sandbox.instance.state == WorkspaceState.ARCHIVED or sandbox.instance.state == WorkspaceState.STOPPED:
-            logger.info(f"Sandbox is in {sandbox.instance.state} state. Starting...")
-            try:
-                daytona.start(sandbox)
-                # Wait a moment for the sandbox to initialize
-                # sleep(5)
-                # Refresh sandbox state after starting
-                sandbox = daytona.get_current_sandbox(sandbox_id)
-                
-                # Start supervisord in a session when restarting
-                start_supervisord_session(sandbox)
-            except Exception as e:
-                logger.error(f"Error starting sandbox: {e}")
-                raise e
-        
-        logger.info(f"Sandbox {sandbox_id} is ready")
-        return sandbox
-        
+        else:
+            logger.error(f"Unsupported sandbox_type '{sandbox_type}' for project {project_id}")
+            raise ValueError(f"Unsupported sandbox_type '{sandbox_type}'")
+
     except Exception as e:
-        logger.error(f"Error retrieving or starting sandbox: {str(e)}")
-        raise e
+        logger.error(f"Error in get_or_start_sandbox for project {project_id}: {e}", exc_info=True)
+        return None
 
 def start_supervisord_session(sandbox: Sandbox):
     """Start supervisord in a session."""
@@ -180,10 +234,13 @@ def create_sandbox(password: str, project_id: str = None) -> Optional[Any]: # Re
 
     if sandbox_provider == 'local_docker':
         logger.info(f"Using local Docker for sandbox creation (project: {project_id}).")
-        # Ensure local_docker_handler's client is available
-        if not local_docker_handler.client:
+
+        if local_docker_handler.client is None:
             logger.error("Local Docker client in local_docker_handler is not initialized. Cannot create local Docker sandbox.")
-            raise Exception("Local Docker client not initialized.")
+            raise LocalDockerUnavailableError(
+                "Local Docker client could not be initialized. "
+                "Ensure Docker is running and the Docker socket is correctly mounted and accessible to the backend container."
+            )
 
         env_vars = {
             "VNC_PASSWORD": password,
@@ -205,8 +262,10 @@ def create_sandbox(password: str, project_id: str = None) -> Optional[Any]: # Re
             logger.info(f"Local Docker sandbox created: {container_info['container_id']}")
             return LocalDockerSandboxWrapper(container_info, password)
         else:
-            logger.error("Failed to create local Docker sandbox.")
-            raise Exception("Failed to create local Docker sandbox container.")
+            logger.error(f"Failed to create local Docker sandbox for project {project_id} (start_sandbox_container returned None).")
+            raise LocalDockerUnavailableError(
+                f"Failed to start local Docker sandbox container for project {project_id}. Check previous logs from local_docker_handler."
+            )
     
     elif sandbox_provider == 'daytona':
         logger.info(f"Using Daytona for sandbox creation (project: {project_id}).")
@@ -216,14 +275,16 @@ def create_sandbox(password: str, project_id: str = None) -> Optional[Any]: # Re
             # or if SANDBOX_TYPE=local but daytona is None (original logic for local mode when daytona was only option)
             # The EnvMode.LOCAL check was part of the original daytona-only logic.
             # If SANDBOX_TYPE is explicitly 'daytona', EnvMode.LOCAL shouldn't prevent error if daytona is None.
-            if config.ENV_MODE == EnvMode.LOCAL and not (config.DAYTONA_API_KEY and config.DAYTONA_SERVER_URL):
+            if config.ENV_MODE == EnvMode.LOCAL and not (config.DAYTONA_API_KEY and config.DAYTONA_SERVER_URL): # Check if EnvMode is available
                  logger.warning("Daytona client not configured (SANDBOX_TYPE is 'daytona' but client init failed, or running in LOCAL mode without full Daytona config). Skipping sandbox creation.")
-                 return None # Or raise, depending on desired strictness for local + daytona type
+                 return None
             else:
-                logger.error("Daytona client is not configured (SANDBOX_TYPE is 'daytona'). Cannot create Daytona sandbox.")
+                logger.error("Daytona client is not configured (SANDBOX_TYPE is 'daytona'). Cannot create sandbox.")
                 raise DaytonaNotConfiguredError("Daytona client is not configured. Please check API key and server URL in environment variables.")
 
         logger.debug("Configuring Daytona sandbox with browser-use image and environment variables")
+        # Ensure CreateSandboxParams is imported if not already
+        # from daytona_sdk import CreateSandboxParams # This was already at the top
         labels = None
         if project_id:
             labels = {'id': project_id}
@@ -252,38 +313,73 @@ def create_sandbox(password: str, project_id: str = None) -> Optional[Any]: # Re
         start_supervisord_session(daytona_sandbox_obj)
         logger.debug(f"Daytona Sandbox environment successfully initialized")
         return daytona_sandbox_obj
-    
+
     else:
         logger.error(f"Unsupported SANDBOX_TYPE: {sandbox_provider}")
         raise ValueError(f"Unsupported SANDBOX_TYPE: {sandbox_provider}")
 
-async def delete_sandbox(sandbox_id: str):
-    """Delete a sandbox by its ID."""
-    # This function will need to be updated to handle both Daytona and local Docker sandboxes
-    # For now, it retains the Daytona-specific logic.
-    # A SANDBOX_TYPE check or inspection of sandbox_id format might be needed.
+async def delete_sandbox(project_id: str, db_client) -> bool:
+    """Delete a sandbox by project_id, handling either local Docker or Daytona."""
+    logger.info(f"Deleting sandbox for project_id: {project_id}")
 
-    global daytona
-    if daytona is None: # This check might need to be more nuanced based on sandbox_provider
-        if config.ENV_MODE == EnvMode.LOCAL: # Assuming EnvMode is still relevant for Daytona path
-            logger.warning(f"Daytona client not configured. Skipping delete_sandbox for sandbox ID {sandbox_id} in local mode.")
-            return False
-        else:
-            logger.error("Daytona client is not configured. Cannot delete sandbox.")
-            raise DaytonaNotConfiguredError("Daytona client is not configured. Please check API key and server URL in environment variables.")
-
-    logger.info(f"Deleting Daytona sandbox with ID: {sandbox_id}")
-    
     try:
-        # Get the sandbox
-        sandbox = daytona.get_current_sandbox(sandbox_id)
+        project_result = await db_client.table('projects').select('sandbox').eq('project_id', project_id).maybe_single().execute()
+        if not project_result.data or not project_result.data.get('sandbox'):
+            logger.warning(f"No project data or sandbox info found for project_id: {project_id}. Nothing to delete.")
+            return True
+
+        sandbox_info = project_result.data['sandbox']
+        sandbox_type = sandbox_info.get('type')
+        actual_sandbox_id = sandbox_info.get('id')
+
+        if not actual_sandbox_id or not sandbox_type:
+            logger.warning(f"Sandbox ID or type missing for project_id: {project_id}. Cannot delete. Info: {sandbox_info}")
+            await db_client.table('projects').update({'sandbox': None}).eq('project_id', project_id).execute()
+            return False
+
+        deleted_successfully = False
+        if sandbox_type == 'local_docker':
+            logger.info(f"Deleting local_docker sandbox: {actual_sandbox_id}")
+            if local_docker_handler.client is None:
+                logger.error("Local Docker client not available. Cannot delete sandbox container.")
+                deleted_successfully = False
+            else:
+                deleted_successfully = local_docker_handler.stop_and_remove_sandbox_container(actual_sandbox_id, raise_not_found=False)
         
-        # Delete the sandbox
-        daytona.remove(sandbox)
+        elif sandbox_type == 'daytona':
+            logger.info(f"Deleting Daytona sandbox: {actual_sandbox_id}")
+            global daytona
+            if daytona is None:
+                logger.error("Daytona client not configured. Cannot delete Daytona sandbox.")
+                deleted_successfully = False
+            else:
+                try:
+                    daytona_sandbox_obj = daytona.get_current_sandbox(actual_sandbox_id)
+                    daytona.remove(daytona_sandbox_obj)
+                    logger.info(f"Successfully deleted Daytona sandbox {actual_sandbox_id}")
+                    deleted_successfully = True
+                except Exception as e_daytona_del:
+                    logger.error(f"Error deleting Daytona sandbox {actual_sandbox_id}: {e_daytona_del}")
+                    if "not found" in str(e_daytona_del).lower():
+                        logger.warning(f"Daytona sandbox {actual_sandbox_id} was already not found or gone.")
+                        deleted_successfully = True
+                    else:
+                        deleted_successfully = False
         
-        logger.info(f"Successfully deleted sandbox {sandbox_id}")
-        return True
+        else:
+            logger.error(f"Unsupported sandbox_type '{sandbox_type}' for project {project_id} during deletion.")
+            await db_client.table('projects').update({'sandbox': None}).eq('project_id', project_id).execute()
+            return False
+
+        if deleted_successfully:
+            logger.info(f"Clearing sandbox info from DB for project {project_id} after successful deletion.")
+            await db_client.table('projects').update({'sandbox': None}).eq('project_id', project_id).execute()
+        else:
+            logger.warning(f"Sandbox for project {project_id} (type: {sandbox_type}, id: {actual_sandbox_id}) might not have been deleted successfully. DB record not cleared.")
+
+        return deleted_successfully
+
     except Exception as e:
-        logger.error(f"Error deleting sandbox {sandbox_id}: {str(e)}")
-        raise e
+        logger.error(f"Error in delete_sandbox for project {project_id}: {e}", exc_info=True)
+        return False
 

@@ -438,16 +438,17 @@ async def start_agent(
             raise HTTPException(status_code=404, detail="Project not found")
         
         project_data = project_result.data[0]
-        sandbox_info = project_data.get('sandbox', {})
-        if not sandbox_info.get('id'):
-            raise HTTPException(status_code=404, detail="No sandbox found for this project")
-            
-        sandbox_id = sandbox_info['id']
-        sandbox = await get_or_start_sandbox(sandbox_id)
-        if not sandbox: # Add this check
-            logger.error(f"Failed to get or start sandbox for project {project_id} in local mode (Daytona not configured). Agent cannot run.")
-            raise HTTPException(status_code=500, detail="Failed to initialize sandbox for local mode (Daytona not configured). Agent cannot run.")
-        logger.info(f"Successfully started sandbox {sandbox_id} for project {project_id}")
+        # sandbox_info = project_data.get('sandbox', {}) # Direct access to sandbox_info not needed here
+        # if not sandbox_info.get('id'):
+        #     raise HTTPException(status_code=404, detail="No sandbox found for this project")
+        # sandbox_id = sandbox_info['id'] # project_id is used directly now
+
+        # Pass project_id and the Supabase client (client)
+        sandbox = await get_or_start_sandbox(project_id, client)
+        if not sandbox:
+            logger.error(f"Failed to get or start sandbox for project {project_id}. Agent cannot run.")
+            raise HTTPException(status_code=500, detail=f"Failed to get or start sandbox for project {project_id}. Agent cannot run.")
+        logger.info(f"Successfully got or started sandbox for project {project_id}. Sandbox ID: {sandbox.id}")
     except Exception as e:
         logger.error(f"Failed to start sandbox for project {project_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to initialize sandbox: {str(e)}")
