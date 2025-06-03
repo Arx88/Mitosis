@@ -784,18 +784,37 @@ async def generate_and_update_project_name(project_id: str, prompt: str):
         db_conn = DBConnection()
         client = await db_conn.client
 
-        model_name = "openai/gpt-4o-mini"
+        model_name_to_use = config.MODEL_TO_USE
+
+        if not model_name_to_use:
+            logger.warning(f"MODEL_TO_USE is not set in config. Using fallback naming for project {project_id}.")
+            generated_name_fallback = f"{prompt[:20].strip()}..." if len(prompt) > 20 else prompt.strip()
+            if not generated_name_fallback: # Handle empty prompt case
+                generated_name_fallback = f"Chat {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}"
+
+            if generated_name_fallback: # Ensure there's a name to update
+                # client is already defined from the try block
+                update_result_fb = await client.table('projects').update({"name": generated_name_fallback}).eq("project_id", project_id).execute()
+                if hasattr(update_result_fb, 'data') and update_result_fb.data:
+                    logger.info(f"Successfully updated project {project_id} with fallback name '{generated_name_fallback}'")
+                else:
+                    logger.error(f"Failed to update project {project_id} with fallback name. Update result: {update_result_fb}")
+
+            logger.info(f"Finished background naming task for project: {project_id} using fallback.")
+            return # Exit early
+
+        # Proceed with LLM-based naming if model_name_to_use is set
         system_prompt = "You are a helpful assistant that generates extremely concise titles (2-4 words maximum) for chat threads based on the user's message. Respond with only the title, no other text or punctuation."
         user_message = f"Generate an extremely brief title (2-4 words only) for a chat thread that starts with this message: \"{prompt}\""
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}]
 
-        logger.debug(f"Calling LLM ({model_name}) for project {project_id} naming.")
-        response = await make_llm_api_call(messages=messages, model_name=model_name, max_tokens=20, temperature=0.7)
+        logger.debug(f"Calling LLM ({model_name_to_use}) for project {project_id} naming.")
+        response = await make_llm_api_call(messages=messages, model_name=model_name_to_use, max_tokens=20, temperature=0.7)
 
         generated_name = None
         if response and response.get('choices') and response['choices'][0].get('message'):
             raw_name = response['choices'][0]['message'].get('content', '').strip()
-            cleaned_name = raw_name.strip('\'" \n\t')
+            cleaned_name = raw_name.strip('\'"\n\t') # Ensures actual newlines and tabs are stripped
             if cleaned_name:
                 generated_name = cleaned_name
                 logger.info(f"LLM generated name for project {project_id}: '{generated_name}'")
@@ -811,10 +830,29 @@ async def generate_and_update_project_name(project_id: str, prompt: str):
             else:
                 logger.error(f"Failed to update project {project_id} name in database. Update result: {update_result}")
         else:
-            logger.warning(f"No generated name, skipping database update for project {project_id}.")
+            logger.warning(f"No generated name from LLM, skipping database update for project {project_id}.")
 
     except Exception as e:
-        logger.error(f"Error in background naming task for project {project_id}: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"Error in background naming task for project {project_id} (LLM call or processing failed): {str(e)}\n{traceback.format_exc()}")
+        # Attempt to set a fallback name if LLM call failed or processing after it failed
+        try:
+            logger.info(f"Attempting to set fallback name for project {project_id} after LLM/processing error.")
+            # client should be defined from the outer try block
+            fallback_name_on_error = f"{prompt[:20].strip()}..." if len(prompt) > 20 else prompt.strip()
+            if not fallback_name_on_error: # Handle empty prompt
+                timestamp = datetime.now(timezone.utc).strftime('%H:%M:%S')
+                fallback_name_on_error = f"Project (err {timestamp})"
+
+            if fallback_name_on_error: # Ensure there's a name
+                update_result_err_fb = await client.table('projects').update({"name": fallback_name_on_error}).eq("project_id", project_id).execute()
+                if hasattr(update_result_err_fb, 'data') and update_result_err_fb.data:
+                    logger.info(f"Successfully updated project {project_id} with fallback name '{fallback_name_on_error}' after LLM/processing error.")
+                else:
+                    logger.error(f"Failed to update project {project_id} with fallback name after LLM/processing error. Result: {update_result_err_fb}")
+            else:
+                logger.error(f"Could not generate a fallback name for project {project_id} after LLM/processing error.")
+        except Exception as fb_err:
+            logger.error(f"Further error when trying to set fallback name for project {project_id} after LLM/processing error: {str(fb_err)}")
     finally:
         # No need to disconnect DBConnection singleton instance here
         logger.info(f"Finished background naming task for project: {project_id}")
