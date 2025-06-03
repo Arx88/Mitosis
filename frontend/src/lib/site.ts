@@ -1,6 +1,6 @@
 export const siteConfig = {
-  name: 'Kortix Suna',
-  url: 'https://suna.so/',
+  name: 'Kortix MITOSIS',
+  url: 'https://mitosis.so/',
   description: 'Kortix AI',
   links: {
     twitter: 'https://x.com/kortixai',
