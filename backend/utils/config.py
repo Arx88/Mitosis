@@ -116,6 +116,9 @@ class Configuration:
     OPENROUTER_API_BASE: Optional[str] = "https://openrouter.ai/api/v1"
     OR_SITE_URL: Optional[str] = "https://kortix.ai"
     OR_APP_NAME: Optional[str] = "Kortix AI"    
+
+    # Ollama configuration
+    OLLAMA_API_BASE: Optional[str] = "http://localhost:11434"
     
     # AWS Bedrock credentials
     AWS_ACCESS_KEY_ID: Optional[str] = None
@@ -190,6 +193,10 @@ class Configuration:
         
         # Load configuration from environment variables
         self._load_from_env()
+
+        # Special handling for OLLAMA_API_BASE default
+        if not os.getenv("OLLAMA_API_BASE") and hasattr(self, "OLLAMA_API_BASE"):
+            logger.info(f"OLLAMA_API_BASE not set, using default: {self.OLLAMA_API_BASE}")
         
         # Perform validation
         self._validate()

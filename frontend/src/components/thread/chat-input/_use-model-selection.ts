@@ -158,6 +158,25 @@ export const MODELS = {
     lowQuality: true,
     description: 'Qwen3 - Alibaba\'s powerful multilingual language model'
   },
+
+  // Ollama models (treated as custom for local mode)
+  'ollama_chat/llama3.1': {
+    tier: 'custom',
+    priority: 20,
+    recommended: true,
+    lowQuality: false,
+    description: 'Ollama Llama 3.1 - Good general-purpose model'
+  },
+  'ollama_chat/mistral': {
+    tier: 'custom',
+    priority: 10,
+    recommended: false,
+    lowQuality: false,
+    description: 'Ollama Mistral - Smaller, faster model'
+  },
+  // Add other popular Ollama models here as needed, e.g.:
+  // 'ollama_chat/codellama': { tier: 'custom', priority: 15, recommended: false, lowQuality: false, description: 'Ollama CodeLlama - Specialized for coding' },
+  // 'ollama/phi3': { tier: 'custom', priority: 5, recommended: false, lowQuality: false, description: 'Ollama Phi-3 - Microsoft\'s small, capable model' },
 };
 
 // Model tier definitions
@@ -319,20 +338,41 @@ export const useModelSelection = () => {
     }
     
     // Add custom models if in local mode
-    if (isLocalMode() && customModels.length > 0) {
-      const customModelOptions = customModels.map(model => ({
-        id: model.id,
-        label: model.label || formatModelName(model.id),
-        requiresSubscription: false,
-        description: MODEL_TIERS.custom.baseDescription,
-        top: false,
-        isCustom: true,
-        priority: 30, // Low priority by default
-        lowQuality: false,
-        recommended: false
-      }));
+    if (isLocalMode()) {
+      const customModelOptions = customModels.map(model => {
+        const modelData = MODELS[model.id as keyof typeof MODELS] || {}; // Get data if it's a predefined custom/Ollama model
+        return {
+          id: model.id,
+          label: model.label || formatModelName(model.id),
+          requiresSubscription: false, // Custom models don't require subscription
+          description: modelData.description || MODEL_TIERS.custom.baseDescription,
+          top: false,
+          isCustom: true,
+          priority: modelData.priority || 30, // Use predefined priority or default
+          lowQuality: modelData.lowQuality || false,
+          recommended: modelData.recommended || false,
+        };
+      });
+
+      // Add predefined Ollama/custom models from MODELS const if not already added via localStorage
+      Object.entries(MODELS).forEach(([id, data]) => {
+        if (data.tier === 'custom' && !customModelOptions.find(m => m.id === id) && !models.find(m => m.id === id)) {
+          // Ensure it's not already in the main 'models' array from API either
+          models.push({
+            id: id,
+            label: formatModelName(id.replace(/^ollama_chat\//, 'Ollama ').replace(/^ollama\//, 'Ollama ')),
+            requiresSubscription: false,
+            description: data.description || MODEL_TIERS.custom.baseDescription,
+            top: false,
+            isCustom: true, // Mark as custom so it's available in local mode
+            priority: data.priority,
+            lowQuality: data.lowQuality,
+            recommended: data.recommended,
+          });
+        }
+      });
       
-      models = [...models, ...customModelOptions];
+      models = [...models, ...customModelOptions.filter(cm => !models.find(m => m.id === cm.id))]; // Add unique custom models
     }
     
     // Sort models consistently in one place:

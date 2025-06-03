@@ -37,13 +37,20 @@ class LLMRetryError(LLMError):
 
 def setup_api_keys() -> None:
     """Set up API keys from environment variables."""
-    providers = ['OPENAI', 'ANTHROPIC', 'GROQ', 'OPENROUTER']
+    providers = ['OPENAI', 'ANTHROPIC', 'GROQ', 'OPENROUTER', 'OLLAMA']
     for provider in providers:
-        key = getattr(config, f'{provider}_API_KEY')
+        key = getattr(config, f'{provider}_API_KEY', None) # Added default None
         if key:
             logger.debug(f"API key set for provider: {provider}")
         else:
             logger.warning(f"No API key found for provider: {provider}")
+
+    # Log Ollama API base
+    if config.OLLAMA_API_BASE:
+        logger.info(f"Ollama API Base is set to: {config.OLLAMA_API_BASE}")
+    else:
+        # This case should ideally not happen if default is set in config.py
+        logger.warning("Ollama API Base is not set. Ollama models may not function.")
 
     # Set up OpenRouter API base if not already set
     if config.OPENROUTER_API_KEY and config.OPENROUTER_API_BASE:
@@ -150,6 +157,19 @@ def prepare_params(
     # Add Bedrock-specific parameters
     if model_name.startswith("bedrock/"):
         logger.debug(f"Preparing AWS Bedrock parameters for model: {model_name}")
+    elif model_name.startswith("ollama/") or model_name.startswith("ollama_chat/"):
+        logger.debug(f"Preparing Ollama parameters for model: {model_name}")
+        if config.OLLAMA_API_BASE:
+            params["api_base"] = config.OLLAMA_API_BASE
+            logger.info(f"Using Ollama API Base: {config.OLLAMA_API_BASE}")
+        else:
+            logger.warning(
+                "OLLAMA_API_BASE is not set in config. "
+                "Ollama models may not work without it. "
+                "LiteLLM might try http://localhost:11434 by default."
+            )
+        # Model name is passed as is, e.g., "ollama/llama3.1"
+        # No specific headers usually needed if api_base is correct
 
         if not model_id and "anthropic.claude-3-7-sonnet" in model_name:
             params["model_id"] = "arn:aws:bedrock:us-west-2:935064898258:inference-profile/us.anthropic.claude-3-7-sonnet-20250219-v1:0"
