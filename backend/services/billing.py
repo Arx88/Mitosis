@@ -868,6 +868,7 @@ async def get_available_models(
     current_user_id: str = Depends(get_current_user_id_from_jwt)
 ):
     """Get the list of models available to the user based on their subscription tier."""
+    logger.info("--- /api/billing/available-models endpoint called ---")
     try:
         # Get Supabase client
         db = DBConnection()
@@ -921,6 +922,7 @@ async def get_available_models(
         model_info = []
         fetched_ollama_model_ids = set()
 
+        logger.info(f"Checking OLLAMA_API_BASE. Value: '{config.OLLAMA_API_BASE}'")
         if config.OLLAMA_API_BASE:
             try:
                 logger.info(f"Attempting to fetch models from Ollama server at {config.OLLAMA_API_BASE}")
