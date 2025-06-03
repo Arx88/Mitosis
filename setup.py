@@ -358,38 +358,6 @@ def collect_daytona_info():
         return {'SETUP_TYPE': 'local_docker'}
 
 def collect_llm_api_keys():
-# Prompts for Daytona configuration if chosen by the user.
-        # This includes API key and instructions for setting up the required Docker image in Daytona.
-        print_info("Configuring Suna to use Daytona for the agent sandbox.")
-        print_info("You'll need a Daytona account and an API key.")
-        print_info(f"Visit {Colors.UNDERLINE}https://app.daytona.io/{Colors.ENDC} to create an account or get your API key.")
-        print_info("Additionally, ensure you have the Suna agent image configured in Daytona:")
-        print_info(f"  - Image Name: {Colors.YELLOW}kortix/suna:0.1.2.8{Colors.ENDC}")
-        print_info(f"  - Entrypoint: {Colors.YELLOW}/usr/bin/supervisord -n -c /etc/supervisor/conf.d/supervisord.conf{Colors.ENDC}")
-        print_info(f"  (These details can be found in {Colors.YELLOW}docs/SELF-HOSTING.md{Colors.ENDC})\n")
-
-        input("Press Enter to continue once you have your Daytona API key and have configured the image...")
-
-        while True:
-            daytona_api_key = input("Enter your Daytona API key: ")
-            if validate_api_key(daytona_api_key): # Basic validation for the API key format
-                break
-            print_error("Invalid API key format. It should be at least 10 characters long.")
-
-        return {
-            'SETUP_TYPE': 'daytona', # Explicitly set type for clarity in .env and logic
-            'DAYTONA_API_KEY': daytona_api_key,
-            'DAYTONA_SERVER_URL': "https://app.daytona.io/api", # Default Daytona server URL
-            'DAYTONA_TARGET': "us", # Default Daytona target
-        }
-    else: # User chose Local Docker
-        # Confirms local Docker setup and reminds user to have Docker running.
-        print_info("Configuring Suna to use a local Docker container for the agent sandbox.")
-        print_info(f"Please ensure Docker is installed and running on your system.")
-        print_info(f"The sandbox will use the {Colors.YELLOW}kortix/suna:0.1.2.8{Colors.ENDC} Docker image.")
-        return {'SETUP_TYPE': 'local_docker'} # Only SETUP_TYPE is needed for local Docker
-
-def collect_llm_api_keys():
     """Collect LLM API keys for various providers"""
     print_info("You need at least one LLM provider API key to use Suna")
     print_info("Available LLM providers: OpenAI, Anthropic, OpenRouter")
