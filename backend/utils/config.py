@@ -143,6 +143,9 @@ class Configuration:
     DAYTONA_API_KEY: Optional[str] = None
     DAYTONA_SERVER_URL: Optional[str] = None
     DAYTONA_TARGET: Optional[str] = None
+
+    # New Sandbox Type Configuration
+    SANDBOX_TYPE: Optional[str] = "daytona"  # 'daytona' or 'local_docker'
     
     # Search and other API keys
     TAVILY_API_KEY: str
