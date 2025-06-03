@@ -340,17 +340,17 @@ export const useModelSelection = () => {
     // Add custom models if in local mode
     if (isLocalMode()) {
       const customModelOptions = customModels.map(model => {
-        const modelData = MODELS[model.id as keyof typeof MODELS] || {}; // Get data if it's a predefined custom/Ollama model
+        const customModelEntry = MODELS[model.id as keyof typeof MODELS]; // This can be undefined
         return {
           id: model.id,
           label: model.label || formatModelName(model.id),
-          requiresSubscription: false, // Custom models don't require subscription
-          description: modelData.description || MODEL_TIERS.custom.baseDescription,
+          requiresSubscription: false,
+          description: customModelEntry?.description || MODEL_TIERS.custom.baseDescription,
           top: false,
           isCustom: true,
-          priority: modelData.priority || 30, // Use predefined priority or default
-          lowQuality: modelData.lowQuality || false,
-          recommended: modelData.recommended || false,
+          priority: customModelEntry?.priority || 30,
+          lowQuality: customModelEntry?.lowQuality || false,
+          recommended: customModelEntry?.recommended || false,
         };
       });
 
