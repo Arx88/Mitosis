@@ -44,7 +44,7 @@ export function FooterSection() {
 
           <div className="flex items-center gap-4">
             <a
-              href="https://github.com/kortix-ai/mitosis"
+              href="https://github.com/kortix-ai/suna"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="GitHub"

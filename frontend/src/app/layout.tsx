@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     template: `%s - ${siteConfig.name}`,
   },
   description:
-    'MITOSIS is a fully open source AI assistant that helps you accomplish real-world tasks with ease. Through natural conversation, MITOSIS becomes your digital companion for research, data analysis, and everyday challenges.',
+    'Suna is a fully open source AI assistant that helps you accomplish real-world tasks with ease. Through natural conversation, Suna becomes your digital companion for research, data analysis, and everyday challenges.',
   keywords: [
     'AI',
     'artificial intelligence',
@@ -43,13 +43,13 @@ export const metadata: Metadata = {
     'research',
     'data analysis',
   ],
-  authors: [{ name: 'Kortix Team', url: 'https://mitosis.so' }],
+  authors: [{ name: 'Kortix Team', url: 'https://suna.so' }],
   creator:
     'Kortix Team - Adam Cohen Hillel, Marko Kraemer, Domenico Gagliardi, and Quoc Dat Le',
   publisher:
     'Kortix Team - Adam Cohen Hillel, Marko Kraemer, Domenico Gagliardi, and Quoc Dat Le',
   category: 'Technology',
-  applicationName: 'MITOSIS',
+  applicationName: 'Suna',
   formatDetection: {
     telephone: false,
     email: false,
@@ -64,17 +64,17 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: 'MITOSIS - Open Source Generalist AI Agent',
+    title: 'Suna - Open Source Generalist AI Agent',
     description:
-      'MITOSIS is a fully open source AI assistant that helps you accomplish real-world tasks with ease through natural conversation.',
+      'Suna is a fully open source AI assistant that helps you accomplish real-world tasks with ease through natural conversation.',
     url: siteConfig.url,
-    siteName: 'MITOSIS',
+    siteName: 'Suna',
     images: [
       {
         url: '/banner.png',
         width: 1200,
         height: 630,
-        alt: 'MITOSIS - Open Source Generalist AI Agent',
+        alt: 'Suna - Open Source Generalist AI Agent',
         type: 'image/png',
       },
     ],
@@ -83,9 +83,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'MITOSIS - Open Source Generalist AI Agent',
+    title: 'Suna - Open Source Generalist AI Agent',
     description:
-      'MITOSIS is a fully open source AI assistant that helps you accomplish real-world tasks with ease through natural conversation.',
+      'Suna is a fully open source AI assistant that helps you accomplish real-world tasks with ease through natural conversation.',
     creator: '@kortixai',
     site: '@kortixai',
     images: [
@@ -93,7 +93,7 @@ export const metadata: Metadata = {
         url: '/banner.png',
         width: 1200,
         height: 630,
-        alt: 'MITOSIS - Open Source Generalist AI Agent',
+        alt: 'Suna - Open Source Generalist AI Agent',
       },
     ],
   },
