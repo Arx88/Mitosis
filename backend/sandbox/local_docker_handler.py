@@ -183,7 +183,21 @@ def execute_command_in_container(container_id: str, command: str, workdir: str =
         container = current_client.containers.get(container_id)
         # The timeout for exec_run is complex; it's for the API call, not the command execution itself.
         # For true command timeout, a more complex async handling or streaming output and checking time would be needed.
-        exit_code, (stdout_bytes, stderr_bytes) = container.exec_run(cmd=command, workdir=workdir, demux=True)
+        exec_result = container.exec_run(cmd=command, workdir=workdir, demux=True)
+        # logger.debug(f"DEBUG: exec_run result structure in execute_command: {exec_result}") # Optional
+
+        exit_code = exec_result[0]
+        output_data = exec_result[1]
+
+        if isinstance(output_data, tuple) and len(output_data) == 2:
+            stdout_bytes, stderr_bytes = output_data
+        elif isinstance(output_data, bytes): # If only stdout (less likely with demux=True but good for robustness)
+            stdout_bytes = output_data
+            stderr_bytes = b"" # demux=True should always return a tuple, but better safe.
+        else: # Should ideally not happen with demux=True
+            logger.warning(f"Unexpected output_data structure from exec_run (with demux=True) in execute_command: {type(output_data)}")
+            stdout_bytes = b""
+            stderr_bytes = str(output_data).encode('utf-8', errors='ignore') if output_data is not None else b""
 
         stdout_str = stdout_bytes.decode('utf-8', errors='replace') if stdout_bytes else ""
         stderr_str = stderr_bytes.decode('utf-8', errors='replace') if stderr_bytes else ""
@@ -237,9 +251,28 @@ def upload_files_to_container(container_id: str, host_path: str, container_path:
         target_parent_dir = os.path.dirname(container_path) if '.' in os.path.basename(container_path) else container_path
         if target_parent_dir != '/': # Avoid trying to create root
              # Create the directory path, including any intermediate directories
-            exit_code_mkdir, (out_mkdir, err_mkdir) = container.exec_run(cmd=f"mkdir -p {target_parent_dir}", workdir="/")
+            exec_result_mkdir = container.exec_run(cmd=f"mkdir -p {target_parent_dir}", workdir="/")
+            # logger.debug(f"DEBUG: exec_run mkdir result: {exec_result_mkdir}") # Optional
+
+            exit_code_mkdir = exec_result_mkdir[0]
+            output_data_mkdir = exec_result_mkdir[1]
+
+            # We primarily need err_mkdir for logging if exit_code_mkdir != 0
+            err_mkdir_bytes = b""
+            if isinstance(output_data_mkdir, tuple) and len(output_data_mkdir) == 2:
+                # out_mkdir_bytes = output_data_mkdir[0] # Not used
+                err_mkdir_bytes = output_data_mkdir[1]
+            elif isinstance(output_data_mkdir, bytes): # Might be stderr if command only outputs to stderr on error
+                err_mkdir_bytes = output_data_mkdir # Or could be stdout, be cautious. For mkdir, stderr is key on failure.
+            else:
+                logger.warning(f"Unexpected output_data structure from exec_run (mkdir): {type(output_data_mkdir)}")
+
+            # The original code uses err_mkdir.decode(...)
+            # For consistency, let's ensure err_mkdir is a usable string for the existing error log
+            err_mkdir_str = err_mkdir_bytes.decode('utf-8', errors='replace')
+
             if exit_code_mkdir != 0:
-                logger.error(f"Failed to create directory {target_parent_dir} in container {container_id}. Error: {err_mkdir.decode('utf-8', errors='replace')}")
+                logger.error(f"Failed to create directory {target_parent_dir} in container {container_id}. Error: {err_mkdir_str}")
                 # Not returning False here, put_archive might still work if dir exists or is root.
 
         if container.put_archive(path=target_parent_dir, data=pw_tarstream):
@@ -280,7 +313,21 @@ def list_files_in_container(container_id: str, path: str) -> List[Dict[str, Any]
 
     try:
         container = current_client.containers.get(container_id)
-        exit_code, (stdout_bytes, stderr_bytes) = container.exec_run(cmd=command, workdir="/") # workdir usually doesn't matter for absolute paths
+        exec_result = container.exec_run(cmd=command, workdir="/")
+        # logger.debug(f"DEBUG: exec_run result structure in list_files: {exec_result}") # Optional: uncomment for debugging
+
+        exit_code = exec_result[0]
+        output_data = exec_result[1]
+
+        if isinstance(output_data, tuple) and len(output_data) == 2:
+            stdout_bytes, stderr_bytes = output_data
+        elif isinstance(output_data, bytes): # If only stdout
+            stdout_bytes = output_data
+            stderr_bytes = b""
+        else:
+            logger.warning(f"Unexpected output_data structure from exec_run in list_files: {type(output_data)}")
+            stdout_bytes = b""
+            stderr_bytes = str(output_data).encode('utf-8', errors='ignore') if output_data is not None else b""
 
         if exit_code != 0:
             stderr_str = stderr_bytes.decode('utf-8', errors='replace') if stderr_bytes else ""
