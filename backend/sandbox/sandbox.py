@@ -136,10 +136,14 @@ async def get_or_start_sandbox(project_id: str, db_client) -> Optional[Any]:
 
         if sandbox_type == 'local_docker':
             logger.info(f"Handling as local_docker sandbox: {actual_sandbox_id}")
-            if local_docker_handler.client is None:
-                raise LocalDockerUnavailableError("Local Docker client not initialized.")
+            # Preemptive client check removed, local_docker_handler will attempt init.
 
             status = local_docker_handler.get_sandbox_container_status(actual_sandbox_id)
+
+            if status is None: # Indicates client was not available in local_docker_handler
+                logger.error(f"Failed to get status for local_docker sandbox {actual_sandbox_id} because Docker client is unavailable.")
+                raise LocalDockerUnavailableError("Local Docker client not available or failed to initialize.")
+
             logger.info(f"Local Docker container {actual_sandbox_id} status: {status}")
 
             if status == 'running':
@@ -160,7 +164,40 @@ async def get_or_start_sandbox(project_id: str, db_client) -> Optional[Any]:
             elif status in ['created', 'exited', 'stopped']:
                 logger.info(f"Local Docker container {actual_sandbox_id} is not running ({status}). Attempting to start.")
                 try:
-                    docker_sdk_client = local_docker_handler.client
+                    # Attempt to get client again, or rely on it being available if status check passed.
+                    # For starting, local_docker_handler doesn't have a direct "start_container" that also inits client.
+                    # This part of the logic might need a small helper in local_docker_handler or careful handling here.
+                    # For now, let's assume if get_sandbox_container_status worked, client is somewhat available.
+                    # However, the original code used local_docker_handler.client directly.
+                    # This implies a direct client access that might be an issue with the new model.
+                    # A better approach would be local_docker_handler.start_container(id) if it existed and handled client init.
+                    # Given the current tools, we'll proceed, but this is a potential refinement area.
+                    # The _get_or_initialize_client is global in local_docker_handler, so subsequent calls in this block
+                    # to local_docker_handler.client (if it were still used) would benefit from the first call's init.
+                    # However, we should use a local_docker_handler function if possible.
+                    # Re-evaluating: local_docker_handler.client is no longer directly accessible in the intended way.
+                    # This block needs to call a function in local_docker_handler that can start the container.
+                    # There isn't one. This reveals a gap.
+                    # For the scope of *this specific subtask*, we are only removing preemptive checks.
+                    # The original code `docker_sdk_client = local_docker_handler.client` will fail if client is None.
+                    # The `_get_or_initialize_client()` is not directly called here.
+                    # This means the start logic might fail if the client wasn't initialized by `get_sandbox_container_status`.
+                    # Let's assume `local_docker_handler.start_sandbox_container` is for *new* containers.
+                    # For existing ones, Docker SDK is used directly.
+                    # This part of the code in `get_or_start_sandbox` might implicitly rely on `client` being populated
+                    # by the `get_sandbox_container_status` call.
+
+                    # Let's assume for now the existing logic for starting an existing container is slightly outside
+                    # the direct "on-demand init" for *new operations*, and might need a follow-up.
+                    # The most direct interpretation of the task is to remove the *initial* check.
+                    # The line `docker_sdk_client = local_docker_handler.client` is problematic.
+                    # It should be: `docker_sdk_client = local_docker_handler._get_or_initialize_client()`
+                    # Or better, local_docker_handler should expose a start_existing_container(id) function.
+                    # Let's make the minimal change to use _get_or_initialize_client() here for now.
+                    docker_sdk_client = local_docker_handler._get_or_initialize_client()
+                    if not docker_sdk_client:
+                        raise LocalDockerUnavailableError("Local Docker client not available to start existing container.")
+
                     container_obj = docker_sdk_client.containers.get(actual_sandbox_id)
                     container_obj.start()
                     logger.info(f"Successfully started local Docker container {actual_sandbox_id}.")
@@ -235,12 +272,7 @@ def create_sandbox(password: str, project_id: str = None) -> Optional[Any]: # Re
     if sandbox_provider == 'local_docker':
         logger.info(f"Using local Docker for sandbox creation (project: {project_id}).")
 
-        if local_docker_handler.client is None:
-            logger.error("Local Docker client in local_docker_handler is not initialized. Cannot create local Docker sandbox.")
-            raise LocalDockerUnavailableError(
-                "Local Docker client could not be initialized. "
-                "Ensure Docker is running and the Docker socket is correctly mounted and accessible to the backend container."
-            )
+        # Preemptive client check removed, local_docker_handler.start_sandbox_container will attempt init.
 
         env_vars = {
             "VNC_PASSWORD": password,
@@ -340,12 +372,15 @@ async def delete_sandbox(project_id: str, db_client) -> bool:
         deleted_successfully = False
         if sandbox_type == 'local_docker':
             logger.info(f"Deleting local_docker sandbox: {actual_sandbox_id}")
-            if local_docker_handler.client is None:
-                logger.error("Local Docker client not available. Cannot delete sandbox container.")
-                deleted_successfully = False
-            else:
-                deleted_successfully = local_docker_handler.stop_and_remove_sandbox_container(actual_sandbox_id, raise_not_found=False)
-        
+            # Preemptive client check removed, local_docker_handler.stop_and_remove_sandbox_container will attempt init.
+            # The function stop_and_remove_sandbox_container returns False if client is not available.
+            deleted_successfully = local_docker_handler.stop_and_remove_sandbox_container(actual_sandbox_id, raise_not_found=False)
+            if not deleted_successfully and local_docker_handler._get_or_initialize_client() is None: # Check if failure was due to client
+                 logger.error("Failed to delete local_docker sandbox because Docker client is unavailable.")
+                 # deleted_successfully is already False, this log gives more context.
+                 # Consider if a specific error should be raised or if current handling is enough.
+                 # For now, matching existing behavior: it would have been false, and DB record not cleared.
+
         elif sandbox_type == 'daytona':
             logger.info(f"Deleting Daytona sandbox: {actual_sandbox_id}")
             global daytona
