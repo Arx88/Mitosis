@@ -874,10 +874,11 @@ async def get_available_models(
         db = DBConnection()
         client = await db.client
 
-        # --- Start of Dynamic Ollama Fetching Block ---
-        model_info = [] # Initialize model_info for dynamic + static models
+        # Initialize lists that will be populated by dynamic and static fetching
+        model_info = []
         fetched_ollama_model_ids = set()
 
+        # === Dynamic Ollama Fetching Block (Runs for ALL modes BEFORE EnvMode check) ===
         logger.info(f"Checking OLLAMA_API_BASE. Value: '{config.OLLAMA_API_BASE}'")
         if config.OLLAMA_API_BASE:
             try:
@@ -904,27 +905,23 @@ async def get_available_models(
                     logger.info("Ollama server returned no models or an empty list.")
             except Exception as e:
                 logger.warning(f"Could not fetch models from Ollama server at {config.OLLAMA_API_BASE}: {str(e)}")
-        # --- End of Dynamic Ollama Fetching Block ---
+        # === End of Dynamic Ollama Fetching Block ===
 
         if config.ENV_MODE == EnvMode.LOCAL:
-            logger.info("Running in local development mode - dynamic Ollama fetch completed, now processing static aliases.")
-            
-            # Process static models from MODEL_NAME_ALIASES for local mode
+            logger.info("Running in local development mode. Processing static models.")
+            # model_info list already contains dynamic Ollama models. Add static non-duplicates.
             for short_name, full_name in MODEL_NAME_ALIASES.items():
                 if full_name in fetched_ollama_model_ids:
-                    logger.debug(f"Local mode: Skipping static model {full_name} as it was already fetched dynamically from Ollama.")
+                    logger.debug(f"Local mode: Skipping static model {full_name} as it was already fetched dynamically.")
                     continue
 
-                # For local mode, display_name is short_name if it's a true alias, otherwise derive.
-                # short_name is the key from alias dict.
+                # Use short_name from alias as display_name for local mode simplicity
                 display_name_local = short_name
-                # if short_name == full_name or '/' in short_name: # if key is not a simple alias
-                #     display_name_local = full_name.split('/')[-1] if '/' in full_name else full_name
                 
                 model_info.append({
                     "id": full_name,
                     "display_name": display_name_local,
-                    "short_name": short_name, # Use the alias key as short_name
+                    "short_name": short_name,
                     "requires_subscription": False,
                     "is_available": True
                 })
@@ -934,59 +931,64 @@ async def get_available_models(
                 "subscription_tier": "Local Development",
                 "total_models": len(model_info)
             }
-        
-        # For non-local mode (production/staging)
-        logger.info("Running in non-local mode - dynamic Ollama fetch completed, now processing tiered static models.")
-        allowed_models = await get_allowed_models_for_user(client, current_user_id)
-        free_tier_models = MODEL_ACCESS_TIERS.get('free', [])
-        
-        subscription = await get_user_subscription(current_user_id)
-        tier_name = 'free'
-        if subscription:
-            price_id = None
-            if subscription.get('items') and subscription['items'].get('data') and len(subscription['items']['data']) > 0:
-                price_id = subscription['items']['data'][0]['price']['id']
-            else:
-                price_id = subscription.get('price_id', config.STRIPE_FREE_TIER_ID)
-            tier_info = SUBSCRIPTION_TIERS.get(price_id)
-            if tier_info:
-                tier_name = tier_info['name']
-
-        # Process statically defined models (from MODEL_NAME_ALIASES) for non-local mode
-        all_static_models = set()
-        model_aliases_map = {} # Renamed to avoid conflict if 'model_aliases' is used elsewhere
-        
-        for short_name, full_name in MODEL_NAME_ALIASES.items():
-            all_static_models.add(full_name)
-            # Populate model_aliases_map for display name resolution of static models
-            # Prioritize first alias if multiple point to same full_name
-            # Exclude full model IDs or provider-prefixed names from being "short" aliases themselves
-            if short_name != full_name and not short_name.startswith(("openai/", "anthropic/", "openrouter/", "xai/", "ollama/")):
-                if full_name not in model_aliases_map:
-                    model_aliases_map[full_name] = short_name
-
-        for model_id_from_static_config in all_static_models:
-            if model_id_from_static_config in fetched_ollama_model_ids:
-                logger.debug(f"Non-local: Skipping static model {model_id_from_static_config} as it was already fetched dynamically from Ollama.")
-                continue
-
-            display_name_static = model_aliases_map.get(model_id_from_static_config, model_id_from_static_config.split('/')[-1] if '/' in model_id_from_static_config else model_id_from_static_config)
-            requires_sub_static = model_id_from_static_config not in free_tier_models
-            is_available_static = model_id_from_static_config in allowed_models
+        else: # Non-local mode (staging/production)
+            logger.info("Running in non-local mode. Processing static models with tier checks.")
+            # model_info list already contains dynamic Ollama models. Add static non-duplicates with tier checks.
             
-            model_info.append({
-                "id": model_id_from_static_config,
-                "display_name": display_name_static,
-                "short_name": model_aliases_map.get(model_id_from_static_config), # Get short_name from map
-                "requires_subscription": requires_sub_static,
-                "is_available": is_available_static
-            })
-        
-        return {
-            "models": model_info, # Contains dynamic Ollama + non-duplicate tiered static models
-            "subscription_tier": tier_name,
-            "total_models": len(model_info)
-        }
+            allowed_models = await get_allowed_models_for_user(client, current_user_id)
+            free_tier_models = MODEL_ACCESS_TIERS.get('free', [])
+
+            subscription = await get_user_subscription(current_user_id)
+            tier_name = 'free'
+            if subscription:
+                price_id = None
+                if subscription.get('items') and subscription['items'].get('data') and len(subscription['items']['data']) > 0:
+                    price_id = subscription['items']['data'][0]['price']['id']
+                else:
+                    price_id = subscription.get('price_id', config.STRIPE_FREE_TIER_ID)
+                tier_info_obj = SUBSCRIPTION_TIERS.get(price_id) # Renamed to avoid conflict
+                if tier_info_obj:
+                    tier_name = tier_info_obj['name']
+
+            # Prepare map for static model display names (aliases)
+            static_model_display_aliases = {}
+            for sn, fn in MODEL_NAME_ALIASES.items():
+                if sn != fn and not sn.startswith(("openai/", "anthropic/", "openrouter/", "xai/", "ollama/")):
+                    if fn not in static_model_display_aliases:
+                        static_model_display_aliases[fn] = sn
+
+            # Iterate through all unique full_names from MODEL_NAME_ALIASES values for non-local processing
+            unique_static_full_names = set(MODEL_NAME_ALIASES.values())
+
+            for static_model_full_name in unique_static_full_names:
+                if static_model_full_name in fetched_ollama_model_ids:
+                    logger.debug(f"Non-local: Skipping static model {static_model_full_name} as it was already fetched dynamically.")
+                    continue
+
+                # Determine display name: use alias if available, else derive from full name
+                display_name_static = static_model_display_aliases.get(static_model_full_name, static_model_full_name.split('/')[-1] if '/' in static_model_full_name else static_model_full_name)
+
+                # Determine short_name: use alias if available for this full_name, otherwise None or derive
+                # This requires finding a key in MODEL_NAME_ALIASES that maps to static_model_full_name
+                # and is a "short" alias. The static_model_display_aliases map already stores this.
+                short_name_static = static_model_display_aliases.get(static_model_full_name)
+
+                requires_sub = static_model_full_name not in free_tier_models
+                is_available = static_model_full_name in allowed_models
+
+                model_info.append({
+                    "id": static_model_full_name,
+                    "display_name": display_name_static,
+                    "short_name": short_name_static,
+                    "requires_subscription": requires_sub,
+                    "is_available": is_available
+                })
+
+            return {
+                "models": model_info,
+                "subscription_tier": tier_name,
+                "total_models": len(model_info)
+            }
         
     except Exception as e:
         logger.error(f"Error getting available models: {str(e)}")
