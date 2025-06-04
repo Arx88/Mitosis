@@ -16,10 +16,8 @@ from pydantic import BaseModel
 from utils.constants import MODEL_ACCESS_TIERS, MODEL_NAME_ALIASES
 import litellm # Added import for litellm
 import asyncio # Added import for asyncio
+import aiohttp # Added import for aiohttp
 
-# Module-level logging for litellm.get_model_list
-logger.info(f"BILLING.PY_MODULE_LOAD: Type of litellm.get_model_list: {type(litellm.get_model_list)}")
-logger.info(f"BILLING.PY_MODULE_LOAD: Is litellm.get_model_list callable: {callable(litellm.get_model_list)}")
 # Initialize Stripe
 stripe.api_key = config.STRIPE_SECRET_KEY
 
@@ -886,45 +884,41 @@ async def get_available_models(
         # === Dynamic Ollama Fetching Block (Runs for ALL modes BEFORE EnvMode check) ===
         logger.info(f"Checking OLLAMA_API_BASE. Value: '{config.OLLAMA_API_BASE}'")
         if config.OLLAMA_API_BASE:
+            ollama_url = f"{config.OLLAMA_API_BASE.rstrip('/')}/api/tags"
             try:
-                logger.info(f"GET_AVAILABLE_MODELS: Type of litellm module: {type(litellm)}")
-                logger.info(f"GET_AVAILABLE_MODELS: Is litellm.get_model_list an attribute: {hasattr(litellm, 'get_model_list')}")
-                if hasattr(litellm, 'get_model_list'):
-                    logger.info(f"GET_AVAILABLE_MODELS: Type of litellm.get_model_list before call: {type(litellm.get_model_list)}")
-                    logger.info(f"GET_AVAILABLE_MODELS: Is litellm.get_model_list callable: {callable(litellm.get_model_list)}")
-                    # Optionally, to see a few attributes if it's a module/object:
-                    # logger.info(f"GET_AVAILABLE_MODELS: Some attributes of litellm.get_model_list: {dir(litellm.get_model_list)[:5] if hasattr(litellm.get_model_list, '__dict__') else 'N/A'}")
-                else:
-                    logger.warning("GET_AVAILABLE_MODELS: litellm module does not have 'get_model_list' attribute.")
-                logger.info(f"GET_AVAILABLE_MODELS: Attempting to fetch models from Ollama server at {config.OLLAMA_API_BASE} using asyncio.to_thread with litellm.get_model_list")
-                ollama_models_raw = await asyncio.to_thread(litellm.get_model_list, api_base=config.OLLAMA_API_BASE, provider="ollama")
-                if ollama_models_raw: # Assuming model_list returns a list (of dicts or ModelResponse objects)
-                    logger.info(f"Successfully fetched {len(ollama_models_raw)} model entries from Ollama.")
-                    for model_detail in ollama_models_raw: # Process each entry
-                        # Adapt access to model name based on actual structure returned by litellm.model_list
-                        # Common keys are 'model_name', 'id', or 'name'. Using .get for safety.
-                        ollama_model_name_only = model_detail.get("model_name") # Or model_detail.id if ModelResponse
-                        if not ollama_model_name_only and isinstance(model_detail, dict): # Fallback for other possible keys
-                            ollama_model_name_only = model_detail.get("id") or model_detail.get("name")
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(ollama_url, timeout=5) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            ollama_models_raw = data.get("models", [])
+                            if ollama_models_raw:
+                                logger.info(f"Successfully fetched {len(ollama_models_raw)} model entries from Ollama server at {ollama_url}.")
+                                for model_detail in ollama_models_raw:
+                                    model_name_only = model_detail.get("name")
+                                    if not model_name_only:
+                                        logger.warning(f"Skipping an Ollama model entry due to missing name identifier: {model_detail}")
+                                        continue
 
-                        if not ollama_model_name_only:
-                            logger.warning(f"Skipping an Ollama model entry due to missing name identifier: {model_detail}")
-                            continue
-
-                        full_ollama_id = f"ollama/{ollama_model_name_only}"
-                        display_name = f"Ollama:{ollama_model_name_only}"
-                        model_info.append({
-                            "id": full_ollama_id,
-                            "display_name": display_name,
-                            "short_name": ollama_model_name_only,
-                            "requires_subscription": False,
-                            "is_available": True
-                        })
-                        fetched_ollama_model_ids.add(full_ollama_id)
-                else:
-                    logger.info("Ollama server returned no models or an empty list.")
-            except Exception as e:
-                logger.warning(f"Could not fetch models from Ollama server at {config.OLLAMA_API_BASE}: {str(e)}")
+                                    full_ollama_id = f"ollama/{model_name_only}"
+                                    display_name = f"Ollama:{model_name_only}"
+                                    model_info.append({
+                                        "id": full_ollama_id,
+                                        "display_name": display_name,
+                                        "short_name": model_name_only,
+                                        "requires_subscription": False,
+                                        "is_available": True
+                                    })
+                                    fetched_ollama_model_ids.add(full_ollama_id)
+                            else:
+                                logger.info(f"Ollama server at {ollama_url} returned no models or an empty list.")
+                        else:
+                            logger.warning(f"Could not fetch models from Ollama server at {ollama_url}. Status: {response.status}, Response: {await response.text()}")
+            except aiohttp.ClientError as e: # More specific exception for network errors
+                logger.warning(f"AIOHTTP client error when fetching models from Ollama server at {ollama_url}: {str(e)}")
+            except asyncio.TimeoutError: # Specific exception for timeouts
+                logger.warning(f"Timeout when fetching models from Ollama server at {ollama_url}.")
+            except Exception as e: # General catch-all for other errors like JSON parsing
+                logger.warning(f"Could not fetch models from Ollama server at {ollama_url}: {str(e)}")
         # === End of Dynamic Ollama Fetching Block ===
 
         if config.ENV_MODE == EnvMode.LOCAL:
