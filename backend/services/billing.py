@@ -17,9 +17,9 @@ from utils.constants import MODEL_ACCESS_TIERS, MODEL_NAME_ALIASES
 import litellm # Added import for litellm
 import asyncio # Added import for asyncio
 
-# Module-level logging for litellm.model_list
-logger.info(f"BILLING.PY_MODULE_LOAD: Type of litellm.model_list: {type(litellm.model_list)}")
-logger.info(f"BILLING.PY_MODULE_LOAD: Is litellm.model_list callable: {callable(litellm.model_list)}")
+# Module-level logging for litellm.get_model_list
+logger.info(f"BILLING.PY_MODULE_LOAD: Type of litellm.get_model_list: {type(litellm.get_model_list)}")
+logger.info(f"BILLING.PY_MODULE_LOAD: Is litellm.get_model_list callable: {callable(litellm.get_model_list)}")
 # Initialize Stripe
 stripe.api_key = config.STRIPE_SECRET_KEY
 
@@ -888,16 +888,16 @@ async def get_available_models(
         if config.OLLAMA_API_BASE:
             try:
                 logger.info(f"GET_AVAILABLE_MODELS: Type of litellm module: {type(litellm)}")
-                logger.info(f"GET_AVAILABLE_MODELS: Is litellm.model_list an attribute: {hasattr(litellm, 'model_list')}")
-                if hasattr(litellm, 'model_list'):
-                    logger.info(f"GET_AVAILABLE_MODELS: Type of litellm.model_list before call: {type(litellm.model_list)}")
-                    logger.info(f"GET_AVAILABLE_MODELS: Is litellm.model_list callable: {callable(litellm.model_list)}")
+                logger.info(f"GET_AVAILABLE_MODELS: Is litellm.get_model_list an attribute: {hasattr(litellm, 'get_model_list')}")
+                if hasattr(litellm, 'get_model_list'):
+                    logger.info(f"GET_AVAILABLE_MODELS: Type of litellm.get_model_list before call: {type(litellm.get_model_list)}")
+                    logger.info(f"GET_AVAILABLE_MODELS: Is litellm.get_model_list callable: {callable(litellm.get_model_list)}")
                     # Optionally, to see a few attributes if it's a module/object:
-                    # logger.info(f"GET_AVAILABLE_MODELS: Some attributes of litellm.model_list: {dir(litellm.model_list)[:5] if hasattr(litellm.model_list, '__dict__') else 'N/A'}")
+                    # logger.info(f"GET_AVAILABLE_MODELS: Some attributes of litellm.get_model_list: {dir(litellm.get_model_list)[:5] if hasattr(litellm.get_model_list, '__dict__') else 'N/A'}")
                 else:
-                    logger.warning("GET_AVAILABLE_MODELS: litellm module does not have 'model_list' attribute.")
-                logger.info(f"GET_AVAILABLE_MODELS: Attempting to fetch models from Ollama server at {config.OLLAMA_API_BASE} using asyncio.to_thread with litellm.model_list")
-                ollama_models_raw = await asyncio.to_thread(litellm.model_list, api_base=config.OLLAMA_API_BASE, provider="ollama")
+                    logger.warning("GET_AVAILABLE_MODELS: litellm module does not have 'get_model_list' attribute.")
+                logger.info(f"GET_AVAILABLE_MODELS: Attempting to fetch models from Ollama server at {config.OLLAMA_API_BASE} using asyncio.to_thread with litellm.get_model_list")
+                ollama_models_raw = await asyncio.to_thread(litellm.get_model_list, api_base=config.OLLAMA_API_BASE, provider="ollama")
                 if ollama_models_raw: # Assuming model_list returns a list (of dicts or ModelResponse objects)
                     logger.info(f"Successfully fetched {len(ollama_models_raw)} model entries from Ollama.")
                     for model_detail in ollama_models_raw: # Process each entry
