@@ -8,7 +8,7 @@ server tool calls through dynamically generated individual function methods.
 import json
 from typing import Any, Dict, List, Optional
 from agentpress.tool import Tool, ToolResult, openapi_schema, xml_schema, ToolSchema, SchemaType
-from mcp_local.client import MCPManager
+from mcp_local.client import MCPManager, SMITHERY_API_KEY
 from utils.logger import logger
 import inspect
 from mcp import ClientSession
@@ -51,9 +51,13 @@ class MCPToolWrapper(Tool):
             # Initialize standard MCP servers from Smithery
             standard_configs = [cfg for cfg in self.mcp_configs if not cfg.get('isCustom', False)]
             custom_configs = [cfg for cfg in self.mcp_configs if cfg.get('isCustom', False)]
-            
-            # Initialize standard MCPs through MCPManager
-            if standard_configs:
+
+            # Check for SMITHERY_API_KEY before processing standard_configs
+            if not SMITHERY_API_KEY:
+                logger.warning("SMITHERY_API_KEY is not set. Standard MCP servers (Smithery-based) will be unavailable.")
+                # Skip processing standard_configs if the API key is missing
+                pass # Effectively skips the next block if standard_configs was the only thing
+            elif standard_configs: # Only proceed if API key is present AND standard_configs exist
                 for config in standard_configs:
                     try:
                         await self.mcp_manager.connect_server(config)
