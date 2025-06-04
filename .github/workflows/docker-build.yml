@@ -49,7 +49,7 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           platforms: linux/arm64, linux/amd64
-          tags: ghcr.io/${{ github.repository }}/suna-backend:${{ steps.get_tag_name.outputs.branch }}
+          tags: ghcr.io/${{ lower(github.repository) }}/suna-backend:${{ steps.get_tag_name.outputs.branch }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
