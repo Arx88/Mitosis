@@ -1,5 +1,7 @@
 # backend/agent/tools/continue_task_tool.py
-from agentpress.tool import Tool # Verificar que esta ruta de importación sea la correcta para la clase base Tool
+# Asegúrate de que la importación de Tool y xml_schema sea desde la ubicación correcta.
+# Basado en la estructura de tu proyecto, probablemente sea:
+from backend.agentpress.tool import Tool, xml_schema
 
 TOOL_NAME = "continue_task"
 TOOL_DESCRIPTION = """Use this tool when you have completed a step in your plan and there are more steps to follow. This will allow you to continue working on the next step of your plan without user intervention. Only call this tool after you have successfully completed a step and are ready for the next one."""
@@ -12,9 +14,12 @@ class ContinueTaskTool(Tool):
     def __init__(self):
         super().__init__() # Llamada al constructor base sin argumentos.
 
-    # Modificar la firma del método 'run' para que no acepte **kwargs.
-    # Debe ser un método simple sin argumentos (aparte de 'self') para que
-    # el sistema de introspección de la clase base 'Tool' pueda generar su esquema correctamente.
+    # AÑADIR EL DECORADOR @xml_schema AQUÍ
+    @xml_schema(
+        tag_name=TOOL_NAME,  # Esto define que el LLM usará <continue_task />
+        mappings=[],         # No se esperan argumentos del LLM para esta herramienta
+        example="<continue_task />" # Ejemplo de uso para el LLM
+    )
     def run(self) -> str:
         """
         Signals the agent to continue with the next step in its plan.
