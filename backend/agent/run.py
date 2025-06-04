@@ -20,6 +20,7 @@ from agent.tools.sb_files_tool import SandboxFilesTool
 from agent.tools.sb_browser_tool import SandboxBrowserTool
 from agent.tools.data_providers_tool import DataProvidersTool
 from agent.tools.expand_msg_tool import ExpandMessageTool
+from backend.agent.tools.continue_task_tool import ContinueTaskTool
 from agent.prompt import get_system_prompt
 from utils.logger import logger
 from utils.auth_utils import get_account_id_from_thread
@@ -105,6 +106,7 @@ async def run_agent(
         thread_manager.add_tool(SandboxExposeTool, project_id=project_id, thread_manager=thread_manager)
         thread_manager.add_tool(ExpandMessageTool, thread_id=thread_id, thread_manager=thread_manager)
         thread_manager.add_tool(MessageTool)
+        thread_manager.add_tool(ContinueTaskTool)
         thread_manager.add_tool(SandboxWebSearchTool, project_id=project_id, thread_manager=thread_manager)
         thread_manager.add_tool(SandboxVisionTool, project_id=project_id, thread_id=thread_id, thread_manager=thread_manager)
         if config.RAPID_API_KEY:
@@ -113,6 +115,7 @@ async def run_agent(
         logger.info("Custom agent specified - registering only enabled tools")
         thread_manager.add_tool(ExpandMessageTool, thread_id=thread_id, thread_manager=thread_manager)
         thread_manager.add_tool(MessageTool)
+        thread_manager.add_tool(ContinueTaskTool)
         if enabled_tools.get('sb_shell_tool', {}).get('enabled', False):
             thread_manager.add_tool(SandboxShellTool, project_id=project_id, thread_manager=thread_manager)
         if enabled_tools.get('sb_files_tool', {}).get('enabled', False):
@@ -287,6 +290,7 @@ async def run_agent(
 
     iteration_count = 0
     continue_execution = True
+    last_tool_name = ""
 
     latest_user_message = await client.table('messages').select('*').eq('thread_id', thread_id).eq('type', 'user').order('created_at', desc=True).limit(1).execute()
     if latest_user_message.data and len(latest_user_message.data) > 0:
@@ -295,6 +299,7 @@ async def run_agent(
 
     while continue_execution and iteration_count < max_iterations:
         iteration_count += 1
+        last_tool_name = "" # Reset at the start of each iteration
         logger.info(f"🔄 Running iteration {iteration_count} of {max_iterations}...")
 
         # Billing check on each iteration - still needed within the iterations
@@ -458,9 +463,22 @@ async def run_agent(
                         yield chunk  # Forward the error chunk
                         continue     # Continue processing other chunks but don't break yet
                     
-                    # Check for termination signal in status messages
+                    # Check for termination signal and capture last_tool_name in status messages
                     if chunk.get('type') == 'status':
                         try:
+                            content_str = chunk.get('content', '{}')
+                            if isinstance(content_str, str):
+                                content = json.loads(content_str)
+                            else:
+                                content = content_str
+
+                            status_type = content.get('status_type')
+                            if status_type in ['tool_started', 'tool_completed', 'tool_failed', 'tool_error']:
+                                tool_name = content.get('function_name') or content.get('xml_tag_name')
+                                if tool_name:
+                                    last_tool_name = tool_name
+                                    # logger.debug(f"Captured last_tool_name: {last_tool_name} from status: {status_type}")
+
                             # Parse the metadata to check for termination signal
                             metadata = chunk.get('metadata', {})
                             if isinstance(metadata, str):
@@ -468,21 +486,18 @@ async def run_agent(
                             
                             if metadata.get('agent_should_terminate'):
                                 agent_should_terminate = True
-                                logger.info("Agent termination signal detected in status message")
+                                logger.info("Agent termination signal detected in status message (ask/complete tool used)")
                                 trace.event(name="agent_termination_signal_detected", level="DEFAULT", status_message="Agent termination signal detected in status message")
                                 
                                 # Extract the tool name from the status content if available
-                                content = chunk.get('content', {})
-                                if isinstance(content, str):
-                                    content = json.loads(content)
-                                
+                                # This is already handled by the last_tool_name capture above for status_type
                                 if content.get('function_name'):
-                                    last_tool_call = content['function_name']
+                                    last_tool_call = content['function_name'] # This variable seems to be from previous logic, ensure it's harmonized or removed if last_tool_name covers it.
                                 elif content.get('xml_tag_name'):
-                                    last_tool_call = content['xml_tag_name']
+                                    last_tool_call = content['xml_tag_name'] # Same as above.
                                     
                         except Exception as e:
-                            logger.debug(f"Error parsing status message for termination check: {e}")
+                            logger.debug(f"Error parsing status message for termination check or last_tool_name: {e}")
                         
                     # Check for XML versions like <ask>, <complete>, or <web-browser-takeover> in assistant content chunks
                     if chunk.get('type') == 'assistant' and 'content' in chunk:
@@ -521,15 +536,23 @@ async def run_agent(
 
                 # Check if we should stop based on the last tool call or error
                 if error_detected:
-                    logger.info(f"Stopping due to error detected in response")
-                    trace.event(name="stopping_due_to_error_detected_in_response", level="DEFAULT", status_message=(f"Stopping due to error detected in response"))
-                    generation.end(output=full_response, status_message="error_detected", level="ERROR")
-                    break
-                    
-                if agent_should_terminate or last_tool_call in ['ask', 'complete', 'web-browser-takeover']:
-                    logger.info(f"Agent decided to stop with tool: {last_tool_call}")
-                    trace.event(name="agent_decided_to_stop_with_tool", level="DEFAULT", status_message=(f"Agent decided to stop with tool: {last_tool_call}"))
-                    generation.end(output=full_response, status_message="agent_stopped")
+                    logger.info(f"Stopping due to error detected in response stream for iteration {iteration_count}.")
+                    trace.event(name="stopping_due_to_error_detected_in_response", level="DEFAULT", status_message=(f"Stopping due to error detected in response stream for iteration {iteration_count}."))
+                    generation.end(output=full_response, status_message="error_detected_in_stream", level="ERROR")
+                    continue_execution = False # Stop the main loop
+                elif agent_should_terminate: # This is set if 'ask' or 'complete' is used
+                    logger.info(f"Agent is stopping in iteration {iteration_count} because 'ask' or 'complete' tool was used (last_tool_name: {last_tool_name}).")
+                    trace.event(name="agent_terminated_by_ask_or_complete", level="DEFAULT", status_message=(f"Agent stopped with tool: {last_tool_name}"))
+                    generation.end(output=full_response, status_message="agent_stopped_ask_complete")
+                    continue_execution = False
+                elif last_tool_name == "continue_task":
+                    logger.info(f"Agent used 'continue_task' in iteration {iteration_count}. Continuing to next step.")
+                    trace.event(name="agent_continue_task", level="DEFAULT", status_message=(f"Agent continuing with last_tool_name: {last_tool_name}"))
+                    # continue_execution remains True, loop will continue
+                else:
+                    logger.info(f"Agent is stopping in iteration {iteration_count} because 'continue_task' was not the last tool (last_tool_name: '{last_tool_name}').")
+                    trace.event(name="agent_stopped_no_continue_task", level="DEFAULT", status_message=(f"Agent stopping, last tool: {last_tool_name}"))
+                    generation.end(output=full_response, status_message=f"agent_stopped_no_continue_task_last_tool:{last_tool_name}")
                     continue_execution = False
 
             except Exception as e:

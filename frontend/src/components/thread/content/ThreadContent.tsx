@@ -15,6 +15,7 @@ import {
 } from '@/components/thread/utils';
 import { KortixLogo } from '@/components/sidebar/kortix-logo';
 import { AgentLoader } from './loader';
+import { ReasoningView } from '@/components/thread/ReasoningView';
 import { parseXmlToolCalls, isNewXmlFormat, extractToolNameFromStream } from '@/components/thread/tool-views/xml-parser';
 import { parseToolResult } from '@/components/thread/tool-views/tool-result-parser';
 
@@ -259,6 +260,7 @@ export interface ThreadContentProps {
     agentName?: string;
     agentAvatar?: React.ReactNode;
     emptyStateComponent?: React.ReactNode; // Add custom empty state component prop
+    reasoning?: string | null;
 }
 
 export const ThreadContent: React.FC<ThreadContentProps> = ({
@@ -281,6 +283,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
     agentName = 'Suna',
     agentAvatar = <KortixLogo size={16} />,
     emptyStateComponent,
+    reasoning,
 }) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -767,6 +770,8 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                             )}
                                                         </div>
                                                     </div>
+                                                    {/* Display ReasoningView if reasoning content exists for this assistant turn */}
+                                                    {reasoning && groupIndex === groupedMessages.length -1 && <ReasoningView content={reasoning} />}
                                                 </div>
                                             </div>
                                         );
