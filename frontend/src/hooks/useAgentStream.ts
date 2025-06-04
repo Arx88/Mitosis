@@ -32,6 +32,7 @@ export interface UseAgentStreamResult {
   toolCall: ParsedContent | null;
   error: string | null;
   agentRunId: string | null; // Expose the currently managed agentRunId
+  reasoning: string | null; // <--- AÑADIR ESTA LÍNEA
   startStreaming: (runId: string) => void;
   stopStreaming: () => Promise<void>;
 }
