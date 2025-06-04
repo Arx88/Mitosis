@@ -132,11 +132,11 @@ class SandboxFilesTool(SandboxToolsBase):
             # Create parent directories if needed
             parent_dir = '/'.join(full_path.split('/')[:-1])
             if parent_dir:
-                self.sandbox.fs.create_folder(parent_dir, "755")
+                await self.sandbox.fs.create_folder(parent_dir, "755")
             
             # Write the file content
-            self.sandbox.fs.upload_file(full_path, file_contents.encode())
-            self.sandbox.fs.set_file_permissions(full_path, permissions)
+            await self.sandbox.fs.upload_file(full_path, file_contents.encode())
+            await self.sandbox.fs.set_file_permissions(full_path, permissions)
             
             message = f"File '{file_path}' created successfully."
             
@@ -294,8 +294,8 @@ class SandboxFilesTool(SandboxToolsBase):
             if not self._file_exists(full_path):
                 return self.fail_response(f"File '{file_path}' does not exist. Use create_file to create a new file.")
             
-            self.sandbox.fs.upload_file(full_path, file_contents.encode())
-            self.sandbox.fs.set_file_permissions(full_path, permissions)
+            await self.sandbox.fs.upload_file(full_path, file_contents.encode())
+            await self.sandbox.fs.set_file_permissions(full_path, permissions)
             
             message = f"File '{file_path}' completely rewritten successfully."
             

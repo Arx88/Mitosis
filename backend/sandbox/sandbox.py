@@ -61,6 +61,57 @@ class LocalDockerFileSystemWrapper:
         logger.info(f"[LocalDockerFS] list_files called for {self.container_id}:{path}")
         return local_docker_handler.list_files_in_container(self.container_id, path)
 
+    async def create_folder(self, folder_path: str, permissions: str = "755") -> bool:
+        logger.info(f"[LocalDockerFS] create_folder called for {self.container_id}:{folder_path} with permissions {permissions}")
+
+        # Create the folder
+        mkdir_command = f"mkdir -p {folder_path}"
+        logger.debug(f"[LocalDockerFS] Executing mkdir command: {mkdir_command} in {self.container_id}")
+        stdout_mkdir, stderr_mkdir, exit_code_mkdir = local_docker_handler.execute_command_in_container(
+            container_id=self.container_id,
+            command=mkdir_command
+        )
+
+        if exit_code_mkdir != 0:
+            logger.error(f"[LocalDockerFS] Failed to create folder {folder_path} in {self.container_id}. Exit code: {exit_code_mkdir}, Stderr: {stderr_mkdir}")
+            return False
+        logger.info(f"[LocalDockerFS] Successfully created folder {folder_path} in {self.container_id}")
+
+        # Set permissions
+        chmod_command = f"chmod {permissions} {folder_path}"
+        logger.debug(f"[LocalDockerFS] Executing chmod command: {chmod_command} in {self.container_id}")
+        stdout_chmod, stderr_chmod, exit_code_chmod = local_docker_handler.execute_command_in_container(
+            container_id=self.container_id,
+            command=chmod_command
+        )
+
+        if exit_code_chmod != 0:
+            logger.error(f"[LocalDockerFS] Failed to set permissions {permissions} for folder {folder_path} in {self.container_id}. Exit code: {exit_code_chmod}, Stderr: {stderr_chmod}")
+            # Optionally, consider if you should try to clean up the created folder if chmod fails.
+            # For now, returning False indicates the operation wasn't fully successful.
+            return False
+        logger.info(f"[LocalDockerFS] Successfully set permissions {permissions} for folder {folder_path} in {self.container_id}")
+
+        return True
+
+    async def set_file_permissions(self, file_path: str, permissions: str) -> bool:
+        logger.info(f"[LocalDockerFS] set_file_permissions called for {self.container_id}:{file_path} with permissions {permissions}")
+
+        chmod_command = f"chmod {permissions} {file_path}"
+        logger.debug(f"[LocalDockerFS] Executing chmod command for file: {chmod_command} in {self.container_id}")
+
+        stdout_chmod, stderr_chmod, exit_code_chmod = local_docker_handler.execute_command_in_container(
+            container_id=self.container_id,
+            command=chmod_command
+        )
+
+        if exit_code_chmod != 0:
+            logger.error(f"[LocalDockerFS] Failed to set permissions {permissions} for file {file_path} in {self.container_id}. Exit code: {exit_code_chmod}, Stderr: {stderr_chmod}")
+            return False
+
+        logger.info(f"[LocalDockerFS] Successfully set permissions {permissions} for file {file_path} in {self.container_id}")
+        return True
+
 class LocalDockerProcessWrapper:
     def __init__(self, container_id: str):
         self.container_id = container_id
