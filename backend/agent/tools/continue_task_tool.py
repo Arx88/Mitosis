@@ -1,7 +1,7 @@
 # backend/agent/tools/continue_task_tool.py
 # Asegúrate de que la importación de Tool y xml_schema sea desde la ubicación correcta.
 # Basado en la estructura de tu proyecto, probablemente sea:
-from backend.agentpress.tool import Tool, xml_schema
+from agentpress.tool import Tool, xml_schema
 
 TOOL_NAME = "continue_task"
 TOOL_DESCRIPTION = """Use this tool when you have completed a step in your plan and there are more steps to follow. This will allow you to continue working on the next step of your plan without user intervention. Only call this tool after you have successfully completed a step and are ready for the next one."""
