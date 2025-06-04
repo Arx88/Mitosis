@@ -339,17 +339,19 @@ def list_files_in_container(container_id: str, path: str) -> List[Dict[str, Any]
             stdout_bytes = output_data[0] if output_data[0] is not None else b""
             stderr_bytes = output_data[1] if output_data[1] is not None else b""
         elif isinstance(output_data, bytes): # Should be less common with demux=True
+            # If demux=True returns raw bytes, it's usually stdout for 'ls', but could be stderr on error.
+            # Given 'ls' primarily outputs to stdout, we'll assign it there and log.
             stdout_bytes = output_data
-            logger.warning(f"exec_run in list_files_in_container (demux=True) returned bytes, expected tuple. Stdout was captured.")
-        else:
-            logger.warning(f"WARNING: Unexpected output_data structure from exec_run in list_files_in_container: {type(output_data)}")
-            if output_data is not None:
-                 try:
-                    # Intenta decodificar si es un tipo inesperado pero convertible a string
-                    stderr_bytes = str(output_data).encode('utf-8', errors='ignore')
-                 except Exception as e_conv: # Use a different variable for the exception
-                    logger.warning(f"Error converting unexpected output_data to string in list_files_in_container: {e_conv}")
-                    pass # Mantener stderr_bytes como b"" si falla la conversión
+            logger.warning(f"exec_run in list_files_in_container (demux=True) returned raw bytes, expected tuple. Assuming it's stdout.")
+        elif output_data is not None: # Handles cases where output_data is not tuple or bytes but is not None
+            logger.warning(f"WARNING: Unexpected output_data type from exec_run in list_files_in_container: {type(output_data)}. Attempting to capture as stderr.")
+            try:
+                stderr_bytes = str(output_data).encode('utf-8', errors='ignore')
+                # stdout_bytes remains b"" in this specific fallback case
+            except Exception as e_conv_fallback:
+                logger.error(f"Error converting unexpected output_data to string for stderr in list_files_in_container: {e_conv_fallback}")
+                # stderr_bytes remains b"" if conversion fails
+        # If output_data is None, stdout_bytes and stderr_bytes correctly remain b"" from initialization.
 
         if exit_code != 0:
             stderr_str = stderr_bytes.decode('utf-8', errors='replace') if stderr_bytes else ""
