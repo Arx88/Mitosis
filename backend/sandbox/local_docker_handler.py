@@ -7,27 +7,39 @@ from typing import Optional, Dict, List, Tuple, Any
 
 logger = logging.getLogger(__name__) # Or from utils.logger if available and preferred
 
-try:
-    # Explicitly try the standard Unix socket first, as it's mounted.
-    client = docker.DockerClient(base_url='unix:///var/run/docker.sock', timeout=10)
-    # Verify connection
-    client.ping()
-    logger.info("Docker client initialized successfully via unix:///var/run/docker.sock and connected to Docker daemon.")
-except docker.errors.DockerException as e_unix_socket:
-    logger.warning(
-        f"Failed to initialize Docker client via unix:///var/run/docker.sock. Error: {e_unix_socket}. "
-        f"Attempting docker.from_env() as a fallback."
-    )
-    try:
-        client = docker.from_env(timeout=10) # Added timeout here as well for consistency
-        client.ping()
-        logger.info("Docker client initialized successfully via docker.from_env() and connected to Docker daemon.")
-    except docker.errors.DockerException as e_from_env:
-        logger.error(
-            f"Failed to initialize Docker client via docker.from_env() as well. "
-            f"Ensure Docker is running and accessible. Error: {e_from_env}"
-        )
-        client = None # Set client to None if all initialization fails
+client: Optional[docker.DockerClient] = None
+
+def _get_or_initialize_client() -> Optional[docker.DockerClient]:
+    """
+    Initializes the Docker client if it's not already initialized.
+    Returns the client instance or None if initialization fails.
+    """
+    global client
+    if client is None:
+        logger.info("Docker client is None, attempting initialization.")
+        try:
+            # Explicitly try the standard Unix socket first, as it's mounted.
+            temp_client = docker.DockerClient(base_url='unix:///var/run/docker.sock', timeout=10)
+            temp_client.ping() # Verify connection
+            logger.info("Docker client initialized successfully via unix:///var/run/docker.sock and connected to Docker daemon.")
+            client = temp_client
+        except docker.errors.DockerException as e_unix_socket:
+            logger.warning(
+                f"Failed to initialize Docker client via unix:///var/run/docker.sock. Error: {e_unix_socket}. "
+                f"Attempting docker.from_env() as a fallback."
+            )
+            try:
+                temp_client = docker.from_env(timeout=10) # Added timeout here as well for consistency
+                temp_client.ping() # Verify connection
+                logger.info("Docker client initialized successfully via docker.from_env() and connected to Docker daemon.")
+                client = temp_client
+            except docker.errors.DockerException as e_from_env:
+                logger.error(
+                    f"Failed to initialize Docker client via docker.from_env() as well. "
+                    f"Ensure Docker is running and accessible. Error: {e_from_env}"
+                )
+                # client remains None if all attempts fail
+    return client
 
 def start_sandbox_container(image_name: str, env_vars: Dict[str, str], project_id: Optional[str] = None,
                             vnc_port_host: Optional[int] = None, web_port_host: Optional[int] = None) -> Optional[Dict[str, Any]]:
@@ -36,7 +48,8 @@ def start_sandbox_container(image_name: str, env_vars: Dict[str, str], project_i
     Returns a dictionary with container_id, host_vnc_port, host_web_port.
     Allows specifying host ports for easier local dev, otherwise Docker assigns random ones.
     """
-    if not client:
+    current_client = _get_or_initialize_client()
+    if not current_client:
         logger.error("Docker client not available. Cannot start sandbox container.")
         return None
 
@@ -45,7 +58,7 @@ def start_sandbox_container(image_name: str, env_vars: Dict[str, str], project_i
     try:
         # Pull the image if not present (optional, run can also do this)
         # For simplicity, let's assume image is pulled or run will handle it.
-        # client.images.pull(image_name)
+        # current_client.images.pull(image_name)
         # logger.info(f"Ensured image {image_name} is available.")
 
         ports_map = {}
@@ -65,7 +78,7 @@ def start_sandbox_container(image_name: str, env_vars: Dict[str, str], project_i
 
         container_name = f"agentpress_sandbox_{project_id or os.urandom(4).hex()}"
 
-        container = client.containers.run(
+        container = current_client.containers.run(
             image=image_name,
             detach=True,
             environment=env_vars,
@@ -112,11 +125,12 @@ def start_sandbox_container(image_name: str, env_vars: Dict[str, str], project_i
 
 def stop_and_remove_sandbox_container(container_id: str, raise_not_found: bool = False) -> bool:
     """Stops and removes a local Docker sandbox container by ID or name."""
-    if not client:
+    current_client = _get_or_initialize_client()
+    if not current_client:
         logger.error("Docker client not available. Cannot stop/remove sandbox container.")
         return False
     try:
-        container = client.containers.get(container_id)
+        container = current_client.containers.get(container_id)
         logger.info(f"Stopping container {container.id}...")
         container.stop(timeout=5)
         logger.info(f"Removing container {container.id}...")
@@ -137,11 +151,12 @@ def stop_and_remove_sandbox_container(container_id: str, raise_not_found: bool =
 
 def get_sandbox_container_status(container_id: str) -> Optional[str]:
     """Gets the status of a local Docker sandbox container."""
-    if not client:
+    current_client = _get_or_initialize_client()
+    if not current_client:
         logger.error("Docker client not available. Cannot get container status.")
         return None
     try:
-        container = client.containers.get(container_id)
+        container = current_client.containers.get(container_id)
         return container.status
     except docker.errors.NotFound:
         logger.warning(f"Container {container_id} not found when checking status.")
@@ -158,13 +173,14 @@ def execute_command_in_container(container_id: str, command: str, workdir: str =
     but Docker's exec_run itself has a default timeout or can be wrapped if long running task.
     For now, we rely on Docker's default exec timeout behavior.
     """
-    if not client:
+    current_client = _get_or_initialize_client()
+    if not current_client:
         logger.error("Docker client not available. Cannot execute command.")
         return None, "Docker client not available", -1
 
     logger.info(f"Executing command in container {container_id} at {workdir}: {command}")
     try:
-        container = client.containers.get(container_id)
+        container = current_client.containers.get(container_id)
         # The timeout for exec_run is complex; it's for the API call, not the command execution itself.
         # For true command timeout, a more complex async handling or streaming output and checking time would be needed.
         exit_code, (stdout_bytes, stderr_bytes) = container.exec_run(cmd=command, workdir=workdir, demux=True)
@@ -192,14 +208,15 @@ def upload_files_to_container(container_id: str, host_path: str, container_path:
                    If host_path is a file, this is the full file path in container.
                    If host_path is a dir, this is the parent dir in container.
     """
-    if not client:
+    current_client = _get_or_initialize_client()
+    if not current_client:
         logger.error("Docker client not available. Cannot upload files.")
         return False
 
     logger.info(f"Uploading from host:'{host_path}' to container:'{container_id}:{container_path}'")
 
     try:
-        container = client.containers.get(container_id)
+        container = current_client.containers.get(container_id)
 
         # Create a tarball in memory
         pw_tarstream = io.BytesIO()
@@ -248,7 +265,8 @@ def list_files_in_container(container_id: str, path: str) -> List[Dict[str, Any]
     Returns a list of dicts with 'name', 'type' ('file'/'directory'), and 'size'.
     Basic implementation, might not handle all edge cases of ls output.
     """
-    if not client:
+    current_client = _get_or_initialize_client()
+    if not current_client:
         logger.error("Docker client not available. Cannot list files.")
         return []
 
@@ -261,7 +279,7 @@ def list_files_in_container(container_id: str, path: str) -> List[Dict[str, Any]
     command = f"ls -lA --time-style=long-iso {path}"
 
     try:
-        container = client.containers.get(container_id)
+        container = current_client.containers.get(container_id)
         exit_code, (stdout_bytes, stderr_bytes) = container.exec_run(cmd=command, workdir="/") # workdir usually doesn't matter for absolute paths
 
         if exit_code != 0:
@@ -313,11 +331,12 @@ def list_files_in_container(container_id: str, path: str) -> List[Dict[str, Any]
 
 def get_container_logs(container_id: str, tail: str = "all") -> Optional[str]:
     """Fetches logs from a container."""
-    if not client:
+    current_client = _get_or_initialize_client()
+    if not current_client:
         logger.error("Docker client not available. Cannot fetch logs.")
         return None
     try:
-        container = client.containers.get(container_id)
+        container = current_client.containers.get(container_id)
         log_bytes = container.logs(stdout=True, stderr=True, timestamps=True, tail=tail if isinstance(tail, int) else (500 if tail == "all" else tail) ) # tail="all" is not a valid SDK value for tail, use a large number
         return log_bytes.decode('utf-8', errors='replace')
     except docker.errors.NotFound:
