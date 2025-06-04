@@ -184,20 +184,26 @@ def execute_command_in_container(container_id: str, command: str, workdir: str =
         # The timeout for exec_run is complex; it's for the API call, not the command execution itself.
         # For true command timeout, a more complex async handling or streaming output and checking time would be needed.
         exec_result = container.exec_run(cmd=command, workdir=workdir, demux=True)
-        # logger.debug(f"DEBUG: exec_run result structure in execute_command: {exec_result}") # Optional
+        logger.debug(f"DEBUG: exec_run result in execute_command_in_container: {exec_result}")
 
         exit_code = exec_result[0]
         output_data = exec_result[1]
+        stdout_bytes, stderr_bytes = b"", b"" # Initialize by default
 
         if isinstance(output_data, tuple) and len(output_data) == 2:
-            stdout_bytes, stderr_bytes = output_data
-        elif isinstance(output_data, bytes): # If only stdout (less likely with demux=True but good for robustness)
+            stdout_bytes = output_data[0] if output_data[0] is not None else b""
+            stderr_bytes = output_data[1] if output_data[1] is not None else b""
+        elif isinstance(output_data, bytes): # Should be less common with demux=True
             stdout_bytes = output_data
-            stderr_bytes = b"" # demux=True should always return a tuple, but better safe.
+            logger.warning(f"exec_run in execute_command_in_container (demux=True) returned bytes, expected tuple. Stdout was captured.")
         else: # Should ideally not happen with demux=True
-            logger.warning(f"Unexpected output_data structure from exec_run (with demux=True) in execute_command: {type(output_data)}")
-            stdout_bytes = b""
-            stderr_bytes = str(output_data).encode('utf-8', errors='ignore') if output_data is not None else b""
+            logger.warning(f"WARNING: Unexpected output_data structure from exec_run (with demux=True) in execute_command_in_container: {type(output_data)}")
+            if output_data is not None:
+                 try:
+                    stderr_bytes = str(output_data).encode('utf-8', errors='ignore')
+                 except Exception as e_conv_exec: # Use a different variable for the exception
+                    logger.warning(f"Error converting unexpected output_data to string in execute_command_in_container: {e_conv_exec}")
+                    pass
 
         stdout_str = stdout_bytes.decode('utf-8', errors='replace') if stdout_bytes else ""
         stderr_str = stderr_bytes.decode('utf-8', errors='replace') if stderr_bytes else ""
@@ -251,24 +257,33 @@ def upload_files_to_container(container_id: str, host_path: str, container_path:
         target_parent_dir = os.path.dirname(container_path) if '.' in os.path.basename(container_path) else container_path
         if target_parent_dir != '/': # Avoid trying to create root
              # Create the directory path, including any intermediate directories
-            exec_result_mkdir = container.exec_run(cmd=f"mkdir -p {target_parent_dir}", workdir="/")
-            # logger.debug(f"DEBUG: exec_run mkdir result: {exec_result_mkdir}") # Optional
+            exec_result_mkdir = container.exec_run(cmd=f"mkdir -p {target_parent_dir}", workdir="/", demux=True)
+            logger.debug(f"DEBUG: exec_run (mkdir) result in upload_files_to_container: {exec_result_mkdir}")
 
             exit_code_mkdir = exec_result_mkdir[0]
             output_data_mkdir = exec_result_mkdir[1]
+            # For mkdir, stdout is usually empty, stderr is important for errors.
+            # Initialize stdout_mkdir_bytes as well for completeness, though it might not be used.
+            stdout_mkdir_bytes, err_mkdir_bytes = b"", b""
 
-            # We primarily need err_mkdir for logging if exit_code_mkdir != 0
-            err_mkdir_bytes = b""
             if isinstance(output_data_mkdir, tuple) and len(output_data_mkdir) == 2:
-                # out_mkdir_bytes = output_data_mkdir[0] # Not used
-                err_mkdir_bytes = output_data_mkdir[1]
-            elif isinstance(output_data_mkdir, bytes): # Might be stderr if command only outputs to stderr on error
-                err_mkdir_bytes = output_data_mkdir # Or could be stdout, be cautious. For mkdir, stderr is key on failure.
+                stdout_mkdir_bytes = output_data_mkdir[0] if output_data_mkdir[0] is not None else b""
+                err_mkdir_bytes = output_data_mkdir[1] if output_data_mkdir[1] is not None else b""
+            elif isinstance(output_data_mkdir, bytes): # Should be less common with demux=True
+                # mkdir output is typically on stderr if it's an error, or nothing on success.
+                # If it's bytes, it's more likely stderr.
+                err_mkdir_bytes = output_data_mkdir
+                logger.warning(f"exec_run (mkdir) in upload_files_to_container (demux=True) returned bytes, expected tuple. Assuming it's stderr.")
             else:
-                logger.warning(f"Unexpected output_data structure from exec_run (mkdir): {type(output_data_mkdir)}")
+                logger.warning(f"WARNING: Unexpected output_data_mkdir structure from exec_run (mkdir): {type(output_data_mkdir)}")
+                if output_data_mkdir is not None:
+                     try:
+                        err_mkdir_bytes = str(output_data_mkdir).encode('utf-8', errors='ignore')
+                     except Exception as e_conv_mkdir: # Use a different variable for the exception
+                        logger.warning(f"Error converting unexpected output_data_mkdir to string: {e_conv_mkdir}")
+                        pass
 
-            # The original code uses err_mkdir.decode(...)
-            # For consistency, let's ensure err_mkdir is a usable string for the existing error log
+            # The original code uses err_mkdir_str for logging, so decode it.
             err_mkdir_str = err_mkdir_bytes.decode('utf-8', errors='replace')
 
             if exit_code_mkdir != 0:
@@ -313,21 +328,28 @@ def list_files_in_container(container_id: str, path: str) -> List[Dict[str, Any]
 
     try:
         container = current_client.containers.get(container_id)
-        exec_result = container.exec_run(cmd=command, workdir="/")
-        # logger.debug(f"DEBUG: exec_run result structure in list_files: {exec_result}") # Optional: uncomment for debugging
+        exec_result = container.exec_run(cmd=command, workdir="/", demux=True)
+        logger.debug(f"DEBUG: exec_run result in list_files_in_container: {exec_result}") # Or use print if logger is not configured for debug in this context
 
         exit_code = exec_result[0]
         output_data = exec_result[1]
+        stdout_bytes, stderr_bytes = b"", b"" # Initialize by default
 
         if isinstance(output_data, tuple) and len(output_data) == 2:
-            stdout_bytes, stderr_bytes = output_data
-        elif isinstance(output_data, bytes): # If only stdout
+            stdout_bytes = output_data[0] if output_data[0] is not None else b""
+            stderr_bytes = output_data[1] if output_data[1] is not None else b""
+        elif isinstance(output_data, bytes): # Should be less common with demux=True
             stdout_bytes = output_data
-            stderr_bytes = b""
+            logger.warning(f"exec_run in list_files_in_container (demux=True) returned bytes, expected tuple. Stdout was captured.")
         else:
-            logger.warning(f"Unexpected output_data structure from exec_run in list_files: {type(output_data)}")
-            stdout_bytes = b""
-            stderr_bytes = str(output_data).encode('utf-8', errors='ignore') if output_data is not None else b""
+            logger.warning(f"WARNING: Unexpected output_data structure from exec_run in list_files_in_container: {type(output_data)}")
+            if output_data is not None:
+                 try:
+                    # Intenta decodificar si es un tipo inesperado pero convertible a string
+                    stderr_bytes = str(output_data).encode('utf-8', errors='ignore')
+                 except Exception as e_conv: # Use a different variable for the exception
+                    logger.warning(f"Error converting unexpected output_data to string in list_files_in_container: {e_conv}")
+                    pass # Mantener stderr_bytes como b"" si falla la conversión
 
         if exit_code != 0:
             stderr_str = stderr_bytes.decode('utf-8', errors='replace') if stderr_bytes else ""
