@@ -77,6 +77,7 @@ export function useAgentStream(
   >([]);
   const [toolCall, setToolCall] = useState<ParsedContent | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reasoning, setReasoning] = useState<string | null>(null);
 
   const streamCleanupRef = useRef<(() => void) | null>(null);
   const isMountedRef = useRef<boolean>(true);
@@ -295,6 +296,9 @@ export function useAgentStream(
       if (status !== 'streaming') updateStatus('streaming');
 
       switch (message.type) {
+        case 'reasoning':
+          setReasoning(parsedContent.content); // Assuming content is directly the reasoning string
+          break;
         case 'assistant':
           console.log('[useAgentStream] test a:', parsedContent.content);
           console.log('[useAgentStream] test a1:', parsedMetadata);
@@ -635,6 +639,7 @@ export function useAgentStream(
     toolCall,
     error,
     agentRunId,
+    reasoning, // <-- EXPONER EL ESTADO
     startStreaming,
     stopStreaming,
   };

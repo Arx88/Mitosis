@@ -461,6 +461,18 @@ class ResponseProcessor:
                 self.trace.event(name="stream_finished_with_reason_xml_tool_limit_reached_after_xml_tool_calls", level="DEFAULT", status_message=(f"Stream finished with reason: xml_tool_limit_reached after {xml_tool_call_count} XML tool calls"))
 
             # --- SAVE and YIELD Final Assistant Message ---
+
+            # Extract the reasoning block from the full accumulated content
+            reasoning_match = re.search(r"<reasoning>(.*?)</reasoning>", accumulated_content, re.DOTALL)
+            if reasoning_match:
+                reasoning_content = reasoning_match.group(1).strip()
+                # Yield the reasoning event directly to the stream
+                yield {
+                    "type": "reasoning",
+                    "content": reasoning_content,
+                }
+                logger.info(f"Extracted and yielded reasoning block for thread {thread_id}")
+
             if accumulated_content:
                 # ... (Truncate accumulated_content logic) ...
                 if config.max_xml_tool_calls > 0 and xml_tool_call_count >= config.max_xml_tool_calls and xml_chunks_buffer:
