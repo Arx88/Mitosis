@@ -1,4 +1,4 @@
-from backend.agentpress.tool import Tool
+from agentpress.tool import Tool
 
 TOOL_NAME = "continue_task"
 TOOL_DESCRIPTION = """
