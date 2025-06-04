@@ -873,23 +873,60 @@ async def get_available_models(
         # Get Supabase client
         db = DBConnection()
         client = await db.client
-        
-        # Check if we're in local development mode
+
+        # --- Start of Dynamic Ollama Fetching Block ---
+        model_info = [] # Initialize model_info for dynamic + static models
+        fetched_ollama_model_ids = set()
+
+        logger.info(f"Checking OLLAMA_API_BASE. Value: '{config.OLLAMA_API_BASE}'")
+        if config.OLLAMA_API_BASE:
+            try:
+                logger.info(f"Attempting to fetch models from Ollama server at {config.OLLAMA_API_BASE}")
+                ollama_models_details = await litellm.aget_model_list(api_base=config.OLLAMA_API_BASE)
+                if ollama_models_details:
+                    logger.info(f"Successfully fetched {len(ollama_models_details)} model details from Ollama.")
+                    for model_detail in ollama_models_details:
+                        ollama_model_name_only = model_detail.get("model_name")
+                        if not ollama_model_name_only:
+                            logger.warning(f"Skipping an Ollama model entry due to missing 'model_name': {model_detail}")
+                            continue
+                        full_ollama_id = f"ollama/{ollama_model_name_only}"
+                        display_name = f"Ollama:{ollama_model_name_only}"
+                        model_info.append({
+                            "id": full_ollama_id,
+                            "display_name": display_name,
+                            "short_name": ollama_model_name_only,
+                            "requires_subscription": False,
+                            "is_available": True
+                        })
+                        fetched_ollama_model_ids.add(full_ollama_id)
+                else:
+                    logger.info("Ollama server returned no models or an empty list.")
+            except Exception as e:
+                logger.warning(f"Could not fetch models from Ollama server at {config.OLLAMA_API_BASE}: {str(e)}")
+        # --- End of Dynamic Ollama Fetching Block ---
+
         if config.ENV_MODE == EnvMode.LOCAL:
-            logger.info("Running in local development mode - billing checks are disabled")
+            logger.info("Running in local development mode - dynamic Ollama fetch completed, now processing static aliases.")
             
-            # In local mode, return all models from MODEL_NAME_ALIASES
-            model_info = []
+            # Process static models from MODEL_NAME_ALIASES for local mode
             for short_name, full_name in MODEL_NAME_ALIASES.items():
-                # Skip entries where the key is a full name to avoid duplicates
-                # if short_name == full_name or '/' in short_name:
-                #     continue
+                if full_name in fetched_ollama_model_ids:
+                    logger.debug(f"Local mode: Skipping static model {full_name} as it was already fetched dynamically from Ollama.")
+                    continue
+
+                # For local mode, display_name is short_name if it's a true alias, otherwise derive.
+                # short_name is the key from alias dict.
+                display_name_local = short_name
+                # if short_name == full_name or '/' in short_name: # if key is not a simple alias
+                #     display_name_local = full_name.split('/')[-1] if '/' in full_name else full_name
                 
                 model_info.append({
                     "id": full_name,
-                    "display_name": short_name,
-                    "short_name": short_name,
-                    "requires_subscription": False  # Always false in local dev mode
+                    "display_name": display_name_local,
+                    "short_name": short_name, # Use the alias key as short_name
+                    "requires_subscription": False,
+                    "is_available": True
                 })
             
             return {
@@ -898,14 +935,12 @@ async def get_available_models(
                 "total_models": len(model_info)
             }
         
-        # For non-local mode, get list of allowed models for this user
+        # For non-local mode (production/staging)
+        logger.info("Running in non-local mode - dynamic Ollama fetch completed, now processing tiered static models.")
         allowed_models = await get_allowed_models_for_user(client, current_user_id)
         free_tier_models = MODEL_ACCESS_TIERS.get('free', [])
         
-        # Get subscription info for context
         subscription = await get_user_subscription(current_user_id)
-        
-        # Determine tier name from subscription
         tier_name = 'free'
         if subscription:
             price_id = None
@@ -913,86 +948,42 @@ async def get_available_models(
                 price_id = subscription['items']['data'][0]['price']['id']
             else:
                 price_id = subscription.get('price_id', config.STRIPE_FREE_TIER_ID)
-            
-            # Get tier info for this price_id
             tier_info = SUBSCRIPTION_TIERS.get(price_id)
             if tier_info:
                 tier_name = tier_info['name']
 
-        model_info = []
-        fetched_ollama_model_ids = set()
-
-        logger.info(f"Checking OLLAMA_API_BASE. Value: '{config.OLLAMA_API_BASE}'")
-        if config.OLLAMA_API_BASE:
-            try:
-                logger.info(f"Attempting to fetch models from Ollama server at {config.OLLAMA_API_BASE}")
-                # In aget_model_list, model_list is a list of dicts, not strings.
-                # Each dict has various keys like 'model_name', 'litellm_provider', etc.
-                # We need to extract the actual model name, which is usually under 'model_name'.
-                ollama_models_details = await litellm.aget_model_list(api_base=config.OLLAMA_API_BASE)
-                if ollama_models_details: # Check if the list is not empty
-                    logger.info(f"Successfully fetched {len(ollama_models_details)} model details from Ollama.")
-                    for model_detail in ollama_models_details:
-                        # Extract the model name (e.g., "llama3", "mistral")
-                        # The key for model name in the returned dicts is 'model_name'
-                        ollama_model_name_only = model_detail.get("model_name")
-                        if not ollama_model_name_only:
-                            logger.warning(f"Skipping an Ollama model entry due to missing 'model_name': {model_detail}")
-                            continue
-
-                        full_ollama_id = f"ollama/{ollama_model_name_only}"
-                        display_name = f"Ollama:{ollama_model_name_only}"
-
-                        model_info.append({
-                            "id": full_ollama_id,
-                            "display_name": display_name,
-                            "short_name": ollama_model_name_only,
-                            "requires_subscription": False, # Assumption for self-hosted
-                            "is_available": True      # Assumption for self-hosted
-                        })
-                        fetched_ollama_model_ids.add(full_ollama_id)
-                else:
-                    logger.info("Ollama server returned no models or an empty list.")
-            except Exception as e:
-                logger.warning(f"Could not fetch models from Ollama server at {config.OLLAMA_API_BASE}: {str(e)}")
-
-        # Get all unique full model names from MODEL_NAME_ALIASES for static models
+        # Process statically defined models (from MODEL_NAME_ALIASES) for non-local mode
         all_static_models = set()
-        model_aliases = {} # For resolving display names of static models
+        model_aliases_map = {} # Renamed to avoid conflict if 'model_aliases' is used elsewhere
         
         for short_name, full_name in MODEL_NAME_ALIASES.items():
             all_static_models.add(full_name)
+            # Populate model_aliases_map for display name resolution of static models
+            # Prioritize first alias if multiple point to same full_name
+            # Exclude full model IDs or provider-prefixed names from being "short" aliases themselves
             if short_name != full_name and not short_name.startswith(("openai/", "anthropic/", "openrouter/", "xai/", "ollama/")):
-                if full_name not in model_aliases: # Prioritize first alias if multiple point to same full_name
-                    model_aliases[full_name] = short_name
-        
-        # Process statically defined models (from MODEL_NAME_ALIASES)
-        # Filter out any that were already added from the dynamic Ollama fetch
+                if full_name not in model_aliases_map:
+                    model_aliases_map[full_name] = short_name
+
         for model_id_from_static_config in all_static_models:
             if model_id_from_static_config in fetched_ollama_model_ids:
-                logger.debug(f"Skipping static model {model_id_from_static_config} as it was already fetched dynamically from Ollama.")
+                logger.debug(f"Non-local: Skipping static model {model_id_from_static_config} as it was already fetched dynamically from Ollama.")
                 continue
 
-            # Logic for models NOT dynamically fetched from Ollama
-            # This handles non-Ollama models and any Ollama models in static config but not on the user's server.
-            display_name = model_aliases.get(model_id_from_static_config, model_id_from_static_config.split('/')[-1] if '/' in model_id_from_static_config else model_id_from_static_config)
-            
-            # Check if model requires subscription (not in free tier)
-            requires_sub = model_id_from_static_config not in free_tier_models
-            
-            # Check if model is available with current subscription
-            is_available = model_id_from_static_config in allowed_models # Corrected variable name
+            display_name_static = model_aliases_map.get(model_id_from_static_config, model_id_from_static_config.split('/')[-1] if '/' in model_id_from_static_config else model_id_from_static_config)
+            requires_sub_static = model_id_from_static_config not in free_tier_models
+            is_available_static = model_id_from_static_config in allowed_models
             
             model_info.append({
-                "id": model_id_from_static_config, # Corrected variable name
-                "display_name": display_name,
-                "short_name": model_aliases.get(model_id_from_static_config), # Corrected variable name
-                "requires_subscription": requires_sub,
-                "is_available": is_available
+                "id": model_id_from_static_config,
+                "display_name": display_name_static,
+                "short_name": model_aliases_map.get(model_id_from_static_config), # Get short_name from map
+                "requires_subscription": requires_sub_static,
+                "is_available": is_available_static
             })
         
         return {
-            "models": model_info,
+            "models": model_info, # Contains dynamic Ollama + non-duplicate tiered static models
             "subscription_tier": tier_name,
             "total_models": len(model_info)
         }
