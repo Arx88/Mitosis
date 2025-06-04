@@ -363,7 +363,12 @@ async def start_agent(
     resolved_model = MODEL_NAME_ALIASES.get(model_name, model_name)
     logger.info(f"Resolved model name: {resolved_model}")
 
-    # Update model_name to use the resolved version
+    # Ensure Ollama models are correctly prefixed after alias resolution
+    if config.OLLAMA_API_BASE and '/' not in resolved_model:
+        resolved_model = f"ollama/{resolved_model}"
+        logger.info(f"Prefixed Ollama model name after alias resolution: {resolved_model}")
+
+    # Update model_name to use the (potentially prefixed) resolved version
     model_name = resolved_model
 
     logger.info(f"Starting new agent for thread: {thread_id} with config: model={model_name}, thinking={body.enable_thinking}, effort={body.reasoning_effort}, stream={body.stream}, context_manager={body.enable_context_manager} (Instance: {instance_id})")
@@ -896,7 +901,12 @@ async def initiate_agent_with_files(
     resolved_model = MODEL_NAME_ALIASES.get(model_name, model_name)
     logger.info(f"Resolved model name: {resolved_model}")
 
-    # Update model_name to use the resolved version
+    # Ensure Ollama models are correctly prefixed after alias resolution
+    if config.OLLAMA_API_BASE and '/' not in resolved_model:
+        resolved_model = f"ollama/{resolved_model}"
+        logger.info(f"Prefixed Ollama model name after alias resolution: {resolved_model}")
+
+    # Update model_name to use the (potentially prefixed) resolved version
     model_name = resolved_model
 
     logger.info(f"Starting new agent in agent builder mode: {is_agent_builder}, target_agent_id: {target_agent_id}")

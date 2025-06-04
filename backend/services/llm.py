@@ -95,6 +95,12 @@ def prepare_params(
     reasoning_effort: Optional[str] = 'low'
 ) -> Dict[str, Any]:
     """Prepare parameters for the API call."""
+
+    # Ensure Ollama models are correctly prefixed
+    if config.OLLAMA_API_BASE and '/' not in model_name:
+        model_name = f"ollama/{model_name}"
+        logger.info(f"Prefixed Ollama model name: {model_name}")
+
     params = {
         "model": model_name,
         "messages": messages,
