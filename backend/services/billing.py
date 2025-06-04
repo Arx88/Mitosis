@@ -15,6 +15,7 @@ from utils.auth_utils import get_current_user_id_from_jwt
 from pydantic import BaseModel
 from utils.constants import MODEL_ACCESS_TIERS, MODEL_NAME_ALIASES
 import litellm # Added import for litellm
+import asyncio # Added import for asyncio
 # Initialize Stripe
 stripe.api_key = config.STRIPE_SECRET_KEY
 
@@ -882,15 +883,21 @@ async def get_available_models(
         logger.info(f"Checking OLLAMA_API_BASE. Value: '{config.OLLAMA_API_BASE}'")
         if config.OLLAMA_API_BASE:
             try:
-                logger.info(f"Attempting to fetch models from Ollama server at {config.OLLAMA_API_BASE}")
-                ollama_models_details = await litellm.aget_model_list(api_base=config.OLLAMA_API_BASE)
-                if ollama_models_details:
-                    logger.info(f"Successfully fetched {len(ollama_models_details)} model details from Ollama.")
-                    for model_detail in ollama_models_details:
-                        ollama_model_name_only = model_detail.get("model_name")
+                logger.info(f"Attempting to fetch models from Ollama server at {config.OLLAMA_API_BASE} using asyncio.to_thread with litellm.model_list")
+                ollama_models_raw = await asyncio.to_thread(litellm.model_list, api_base=config.OLLAMA_API_BASE, provider="ollama")
+                if ollama_models_raw: # Assuming model_list returns a list (of dicts or ModelResponse objects)
+                    logger.info(f"Successfully fetched {len(ollama_models_raw)} model entries from Ollama.")
+                    for model_detail in ollama_models_raw: # Process each entry
+                        # Adapt access to model name based on actual structure returned by litellm.model_list
+                        # Common keys are 'model_name', 'id', or 'name'. Using .get for safety.
+                        ollama_model_name_only = model_detail.get("model_name") # Or model_detail.id if ModelResponse
+                        if not ollama_model_name_only and isinstance(model_detail, dict): # Fallback for other possible keys
+                            ollama_model_name_only = model_detail.get("id") or model_detail.get("name")
+
                         if not ollama_model_name_only:
-                            logger.warning(f"Skipping an Ollama model entry due to missing 'model_name': {model_detail}")
+                            logger.warning(f"Skipping an Ollama model entry due to missing name identifier: {model_detail}")
                             continue
+
                         full_ollama_id = f"ollama/{ollama_model_name_only}"
                         display_name = f"Ollama:{ollama_model_name_only}"
                         model_info.append({
