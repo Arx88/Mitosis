@@ -51,8 +51,26 @@ class SandboxBrowserTool(SandboxToolsBase):
             raw_response = self.sandbox.process.execute(curl_cmd, timeout=30)
             
             exit_code = raw_response.exit_code
-            stdout_str = raw_response.result if raw_response.result is not None else ""
-            stderr_str = raw_response.stderr if raw_response.stderr is not None else ""
+            # stdout_str = raw_response.result if raw_response.result is not None else ""
+            # stderr_str = raw_response.stderr if raw_response.stderr is not None else ""
+
+            # Temporary variables from raw_response
+            temp_stdout = raw_response.result
+            temp_stderr = raw_response.stderr
+
+            if isinstance(temp_stdout, bytes):
+                stdout_str = temp_stdout.decode('utf-8', errors='replace')
+            elif isinstance(temp_stdout, str):
+                stdout_str = temp_stdout
+            else: # Handle None or other unexpected types
+                stdout_str = ""
+
+            if isinstance(temp_stderr, bytes):
+                stderr_str = temp_stderr.decode('utf-8', errors='replace')
+            elif isinstance(temp_stderr, str):
+                stderr_str = temp_stderr
+            else: # Handle None or other unexpected types
+                stderr_str = ""
 
             logger.debug(f"SandboxBrowserTool: exit_code: {exit_code}")
             logger.debug(f"SandboxBrowserTool: stdout_str before JSON parsing: '{stdout_str}'")
