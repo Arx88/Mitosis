@@ -1,6 +1,6 @@
 from typing import Dict, Type, Any, List, Optional, Callable
 from .tool import Tool, SchemaType # Relative import
-from backend.utils.logger import logger # Reverted
+from utils.logger import logger # Direct import
 
 
 class ToolRegistry:
