@@ -291,7 +291,6 @@ class SandboxFilesTool(SandboxToolsBase):
                 return self.fail_response(f"File '{file_path}' does not exist. Use create_file to create a new file.")
             
             self.sandbox.fs.upload_file(full_path, file_contents.encode())
-            self.sandbox.fs.set_file_permissions(full_path, permissions)
             
             message = f"File '{file_path}' completely rewritten successfully."
             
