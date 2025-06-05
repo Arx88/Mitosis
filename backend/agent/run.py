@@ -332,7 +332,17 @@ async def run_agent(
         latest_browser_state_msg = await client.table('messages').select('*').eq('thread_id', thread_id).eq('type', 'browser_state').order('created_at', desc=True).limit(1).execute()
         if latest_browser_state_msg.data and len(latest_browser_state_msg.data) > 0:
             try:
-                browser_content = json.loads(latest_browser_state_msg.data[0]["content"])
+                raw_browser_content = latest_browser_state_msg.data[0]["content"]
+                if isinstance(raw_browser_content, str):
+                    logger.debug("Browser state content is a string, attempting to parse as JSON.")
+                    browser_content = json.loads(raw_browser_content)
+                elif isinstance(raw_browser_content, dict):
+                    logger.debug("Browser state content is already a dictionary, using directly.")
+                    browser_content = raw_browser_content
+                else:
+                    logger.warning(f"Browser state content is of unexpected type: {type(raw_browser_content)}. Attempting to use as is, but may cause issues.")
+                    browser_content = raw_browser_content # Or handle as an error / default to empty dict
+
                 screenshot_base64 = browser_content.get("screenshot_base64")
                 screenshot_url = browser_content.get("screenshot_url")
                 
