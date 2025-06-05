@@ -133,6 +133,9 @@ async def run_agent(
             thread_manager.add_tool(SandboxWebSearchTool, project_id=project_id, thread_manager=thread_manager)
         if enabled_tools.get('sb_vision_tool', {}).get('enabled', False):
             thread_manager.add_tool(SandboxVisionTool, project_id=project_id, thread_id=thread_id, thread_manager=thread_manager)
+        if enabled_tools.get('sandbox_document_generation_tool', {}).get('enabled', False):
+            thread_manager.add_tool(SandboxDocumentGenerationTool, project_id=project_id, thread_manager=thread_manager)
+            logger.info("Registered SandboxDocumentGenerationTool for custom agent.") # Optional: Add a log
         if config.RAPID_API_KEY and enabled_tools.get('data_providers_tool', {}).get('enabled', False):
             thread_manager.add_tool(DataProvidersTool)
 
