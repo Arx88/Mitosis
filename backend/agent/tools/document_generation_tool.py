@@ -341,11 +341,11 @@ async def main_test():
                 await asyncio.sleep(1) # Simulate time taken
                 return MockProc()
             elif "apt-get install" in command:
-                logger.info(f"MockSandbox: Simulating apt-get install for {command.split середній स्कूल 'install -y'}")
+                logger.info(f"MockSandbox: Simulating apt-get install for command: {command}")
                 await asyncio.sleep(1)
                 return MockProc()
             elif "python -m pip install" in command:
-                logger.info(f"MockSandbox: Simulating pip install for {command.split середній স্কুল 'install '}")
+                logger.info(f"MockSandbox: Simulating pip install for command: {command}")
                 await asyncio.sleep(1)
                 self._weasyprint_installed = "weasyprint" in command # Mark as installed
                 return MockProc()
