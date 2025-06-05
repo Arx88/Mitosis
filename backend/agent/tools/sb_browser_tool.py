@@ -48,14 +48,12 @@ class SandboxBrowserTool(SandboxToolsBase):
             
             # Assuming self.sandbox.process.execute now returns (exit_code, (stdout_bytes, stderr_bytes))
             # as per the implied change in the subtask description.
+            # New return type is (stdout_str, stderr_str, exit_code)
             raw_response = self.sandbox.process.execute(curl_cmd, timeout=30)
             
-            exit_code = raw_response[0]
-            stdout_bytes = raw_response[1][0] if raw_response[1] else b""
-            stderr_bytes = raw_response[1][1] if raw_response[1] else b""
-
-            stdout_str = stdout_bytes.decode('utf-8', errors='replace') if stdout_bytes else ""
-            stderr_str = stderr_bytes.decode('utf-8', errors='replace') if stderr_bytes else ""
+            stdout_str = raw_response[0] if raw_response[0] is not None else ""
+            stderr_str = raw_response[1] if raw_response[1] is not None else ""
+            exit_code = raw_response[2]
 
             if exit_code == 0:
                 try:
