@@ -15,6 +15,7 @@ import { AskToolView } from '../ask-tool/AskToolView';
 import { CompleteToolView } from '../CompleteToolView';
 import { ExecuteDataProviderCallToolView } from '../data-provider-tool/ExecuteDataProviderCallToolView';
 import { DataProviderEndpointsToolView } from '../data-provider-tool/DataProviderEndpointsToolView';
+import { DocumentGenerationToolView } from '../DocumentGenerationToolView';
 
 
 export type ToolViewComponent = React.ComponentType<ToolViewProps>;
@@ -65,6 +66,10 @@ const defaultRegistry: ToolViewRegistryType = {
 
   'ask': AskToolView,
   'complete': CompleteToolView,
+
+  // Custom tools
+  'SandboxDocumentGenerationTool': DocumentGenerationToolView, // Assuming this is the name passed from backend
+  'document-generation': DocumentGenerationToolView, // Fallback or alternative name
 
   'default': GenericToolView,
 };

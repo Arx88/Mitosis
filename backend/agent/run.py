@@ -6,6 +6,7 @@ from typing import Optional
 
 # from agent.tools.message_tool import MessageTool
 from agent.tools.message_tool import MessageTool
+from agent.tools.document_generation_tool import SandboxDocumentGenerationTool
 from agent.tools.sb_deploy_tool import SandboxDeployTool
 from agent.tools.sb_expose_tool import SandboxExposeTool
 from agent.tools.web_search_tool import SandboxWebSearchTool
@@ -109,6 +110,7 @@ async def run_agent(
         thread_manager.add_tool(ContinueTaskTool)
         thread_manager.add_tool(SandboxWebSearchTool, project_id=project_id, thread_manager=thread_manager)
         thread_manager.add_tool(SandboxVisionTool, project_id=project_id, thread_id=thread_id, thread_manager=thread_manager)
+        thread_manager.add_tool(SandboxDocumentGenerationTool, project_id=project_id, thread_manager=thread_manager)
         if config.RAPID_API_KEY:
             thread_manager.add_tool(DataProvidersTool)
     else:
