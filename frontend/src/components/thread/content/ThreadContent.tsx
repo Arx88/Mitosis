@@ -302,6 +302,32 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
     // In playback mode, we use visibleMessages instead of messages
     const displayMessages = readOnly && visibleMessages ? visibleMessages : messages;
 
+    // Memoize allAttachments calculation
+    const allAttachments = React.useMemo(() => {
+        const attachments: string[] = [];
+        if (!sandboxId) return attachments;
+
+        displayMessages.forEach(message => {
+            if (message.type === 'user') {
+                try {
+                    const content = typeof message.content === 'string' ? message.content : '';
+                    const attachmentsMatch = content.match(/\[Uploaded File: (.*?)\]/g);
+                    if (attachmentsMatch) {
+                        attachmentsMatch.forEach(match => {
+                            const pathMatch = match.match(/\[Uploaded File: (.*?)\]/);
+                            if (pathMatch && pathMatch[1]) {
+                                attachments.push(pathMatch[1]);
+                            }
+                        });
+                    }
+                } catch (e) {
+                    console.error('Error parsing message attachments:', e);
+                }
+            }
+        });
+        return attachments;
+    }, [displayMessages, sandboxId]);
+
     const handleScroll = () => {
         if (!messagesContainerRef.current) return;
         const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
@@ -314,40 +340,18 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
         messagesEndRef.current?.scrollIntoView({ behavior });
     }, []);
 
-    // Preload all message attachments when messages change or sandboxId is provided
+    // Preload all message attachments
     React.useEffect(() => {
         if (!sandboxId) return;
 
-        // Extract all file attachments from messages
-        const allAttachments: string[] = [];
-
-        displayMessages.forEach(message => {
-            if (message.type === 'user') {
-                try {
-                    const content = typeof message.content === 'string' ? message.content : '';
-                    const attachmentsMatch = content.match(/\[Uploaded File: (.*?)\]/g);
-                    if (attachmentsMatch) {
-                        attachmentsMatch.forEach(match => {
-                            const pathMatch = match.match(/\[Uploaded File: (.*?)\]/);
-                            if (pathMatch && pathMatch[1]) {
-                                allAttachments.push(pathMatch[1]);
-                            }
-                        });
-                    }
-                } catch (e) {
-                    console.error('Error parsing message attachments:', e);
-                }
-            }
-        });
-
-        // Use React Query preloading if we have attachments AND a valid token
+        // allAttachments is now calculated above and passed as a dependency
         if (allAttachments.length > 0 && session?.access_token) {
-            // Preload files with React Query in background
             preloadFiles(sandboxId, allAttachments).catch(err => {
                 console.error('React Query preload failed:', err);
             });
         }
-    }, [displayMessages, sandboxId, session?.access_token, preloadFiles]);
+        // Updated dependency array
+    }, [allAttachments, sandboxId, session?.access_token, preloadFiles]);
 
     return (
         <>
