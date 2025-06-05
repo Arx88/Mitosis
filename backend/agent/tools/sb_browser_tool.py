@@ -50,23 +50,13 @@ class SandboxBrowserTool(SandboxToolsBase):
             # as per the implied change in the subtask description.
             raw_response = self.sandbox.process.execute(curl_cmd, timeout=30)
             
-            exit_code = raw_response[0]
-            stdout_bytes = raw_response[1][0] if raw_response[1] else b""
-            stderr_bytes = raw_response[1][1] if raw_response[1] else b""
+            exit_code = raw_response.exit_code
+            stdout_str = raw_response.result if raw_response.result is not None else ""
+            stderr_str = raw_response.stderr if raw_response.stderr is not None else ""
 
-            if isinstance(stdout_bytes, bytes):
-                stdout_str = stdout_bytes.decode('utf-8', errors='replace')
-            elif isinstance(stdout_bytes, str):
-                stdout_str = stdout_bytes
-            else:
-                stdout_str = ""
-
-            if isinstance(stderr_bytes, bytes):
-                stderr_str = stderr_bytes.decode('utf-8', errors='replace')
-            elif isinstance(stderr_bytes, str):
-                stderr_str = stderr_bytes
-            else:
-                stderr_str = ""
+            logger.debug(f"SandboxBrowserTool: exit_code: {exit_code}")
+            logger.debug(f"SandboxBrowserTool: stdout_str before JSON parsing: '{stdout_str}'")
+            logger.debug(f"SandboxBrowserTool: stderr_str: '{stderr_str}'")
 
             if exit_code == 0:
                 try:
