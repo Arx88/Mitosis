@@ -817,36 +817,53 @@ async def generate_and_update_project_name(project_id: str, prompt: str):
         # === End of new logic ===
 
         # === Ollama availability check and fallback for project naming ===
+        local_fallback_name_generated = False
+        generated_name = None  # Ensure generated_name is initialized
+
         if model_name_to_use.startswith("ollama/"):
             unprefixed_ollama_model_name = model_name_to_use.split('/', 1)[1]
             if not await is_ollama_model_available(unprefixed_ollama_model_name):
                 logger.warning(
                     f"Configured MODEL_TO_USE '{model_name_to_use}' for project naming is not available in Ollama. "
-                    f"Falling back to '{MODEL_TO_USE_FALLBACK_FOR_NAMING}'."
+                    f"Generating a generic local name instead of calling external LLM."
                 )
-                model_name_to_use = MODEL_TO_USE_FALLBACK_FOR_NAMING
+                # Generate a generic local name
+                generated_name = f"Chat {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}"
+                # If prompt is available and long enough, try to use it for a more descriptive local name
+                if prompt and len(prompt.strip()) > 0:
+                    prompt_prefix = prompt.strip()[:20]
+                    if len(prompt.strip()) > 20:
+                        prompt_prefix += "..."
+                    generated_name = prompt_prefix
+
+                local_fallback_name_generated = True
         # === End of Ollama availability check ===
 
-        # Proceed with LLM-based naming if model_name_to_use is set
-        system_prompt = "You are a helpful assistant that generates extremely concise titles (2-4 words maximum) for chat threads based on the user's message. Respond with only the title, no other text or punctuation."
-        user_message = f"Generate an extremely brief title (2-4 words only) for a chat thread that starts with this message: \"{prompt}\""
-        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}]
+        # Proceed with LLM-based naming only if a local fallback was NOT generated and model_name_to_use is set
+        if not local_fallback_name_generated and model_name_to_use:
+            system_prompt = "You are a helpful assistant that generates extremely concise titles (2-4 words maximum) for chat threads based on the user's message. Respond with only the title, no other text or punctuation."
+            user_message = f"Generate an extremely brief title (2-4 words only) for a chat thread that starts with this message: \"{prompt}\""
+            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_message}]
 
-        logger.debug(f"Calling LLM ({model_name_to_use}) for project {project_id} naming.")
-        response = await make_llm_api_call(messages=messages, model_name=model_name_to_use, max_tokens=20, temperature=0.7)
+            logger.debug(f"Calling LLM ({model_name_to_use}) for project {project_id} naming.")
+            response = await make_llm_api_call(messages=messages, model_name=model_name_to_use, max_tokens=20, temperature=0.7)
 
-        generated_name = None
-        if response and response.get('choices') and response['choices'][0].get('message'):
-            raw_name = response['choices'][0]['message'].get('content', '').strip()
-            cleaned_name = raw_name.strip('\'"\n\t') # Ensures actual newlines and tabs are stripped
-            if cleaned_name:
-                generated_name = cleaned_name
-                logger.info(f"LLM generated name for project {project_id}: '{generated_name}'")
+            if response and response.get('choices') and response['choices'][0].get('message'):
+                raw_name = response['choices'][0]['message'].get('content', '').strip()
+                cleaned_name = raw_name.strip('\'"\n\t') # Ensures actual newlines and tabs are stripped
+                if cleaned_name:
+                    generated_name = cleaned_name
+                    logger.info(f"LLM generated name for project {project_id}: '{generated_name}'")
+                else:
+                    logger.warning(f"LLM returned an empty name for project {project_id}. Using fallback naming.")
+                    # Fallback if LLM gives empty name
+                    generated_name = f"Chat {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}"
             else:
-                logger.warning(f"LLM returned an empty name for project {project_id}.")
-        else:
-            logger.warning(f"Failed to get valid response from LLM for project {project_id} naming. Response: {response}")
+                logger.warning(f"Failed to get valid response from LLM for project {project_id} naming. Response: {response}. Using fallback naming.")
+                # Fallback if LLM call fails
+                generated_name = f"Chat {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}"
 
+        # Update project name if a name was generated (either by LLM or local fallback)
         if generated_name:
             update_result = await client.table('projects').update({"name": generated_name}).eq("project_id", project_id).execute()
             if hasattr(update_result, 'data') and update_result.data:
