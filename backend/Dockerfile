@@ -9,10 +9,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     curl     git     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user and set up directories
 RUN useradd -m -u 1000 appuser && \
