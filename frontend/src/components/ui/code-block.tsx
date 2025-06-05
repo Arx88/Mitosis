@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { codeToHtml } from 'shiki';
 import { useTheme } from 'next-themes';
 
@@ -35,9 +35,9 @@ function CodeBlockCode({
   const { resolvedTheme } = useTheme();
   const [highlightedHtml, setHighlightedHtml] = useState<string | null>(null);
 
-  // Use github-dark when in dark mode, github-light when in light mode
-  const theme =
-    propTheme || (resolvedTheme === 'dark' ? 'github-dark' : 'github-light');
+  const stableTheme = useMemo(() => {
+    return propTheme || (resolvedTheme === 'dark' ? 'github-dark' : 'github-light');
+  }, [propTheme, resolvedTheme]);
 
   useEffect(() => {
     async function highlight() {
@@ -47,7 +47,7 @@ function CodeBlockCode({
       }
       const html = await codeToHtml(code, {
         lang: language,
-        theme,
+        theme: stableTheme, // Use stableTheme here
         transformers: [
           {
             pre(node) {
@@ -62,7 +62,7 @@ function CodeBlockCode({
       setHighlightedHtml(html);
     }
     highlight();
-  }, [code, language, theme]);
+  }, [code, language, stableTheme]); // Updated dependencies
 
   const classNames = cn('[&_pre]:!bg-background/95 [&_pre]:rounded-lg [&_pre]:p-4 [&_pre]:!overflow-x-auto [&_pre]:!w-px [&_pre]:!flex-grow [&_pre]:!min-w-0 [&_pre]:!box-border [&_.shiki]:!overflow-x-auto [&_.shiki]:!w-px [&_.shiki]:!flex-grow [&_.shiki]:!min-w-0 [&_code]:!min-w-0 [&_code]:!whitespace-pre', 'w-px flex-grow min-w-0 overflow-hidden flex w-full', className);
 
