@@ -1323,39 +1323,69 @@ class ResponseProcessor:
     # Tool execution methods
     async def _execute_tool(self, tool_call: Dict[str, Any]) -> ToolResult:
         """Execute a single tool call and return the result."""
-        span = self.trace.span(name=f"execute_tool.{tool_call['function_name']}", input=tool_call["arguments"])            
+        # Ensure original_function_name is available for span naming even if tool_call is malformed
+        original_function_name_for_span = tool_call.get("function_name", "unknown_tool")
+        span = self.trace.span(name=f"execute_tool.{original_function_name_for_span}", input=tool_call.get("arguments"))
+
         try:
-            function_name = tool_call["function_name"]
+            original_function_name = tool_call["function_name"]
             arguments = tool_call["arguments"]
 
-            logger.info(f"Executing tool: {function_name} with arguments: {arguments}")
-            self.trace.event(name="executing_tool", level="DEFAULT", status_message=(f"Executing tool: {function_name} with arguments: {arguments}"))
+            # Normalize the function name for lookup
+            normalized_function_name = original_function_name.replace('-', '_')
+
+            logger.info(f"Executing tool: {original_function_name} (normalized to {normalized_function_name}) with arguments: {arguments}")
+            self.trace.event(name="executing_tool", level="DEFAULT", status_message=(f"Executing tool: {original_function_name} (normalized to {normalized_function_name}) with arguments: {arguments}"))
             
             if isinstance(arguments, str):
                 try:
                     arguments = safe_json_parse(arguments)
                 except json.JSONDecodeError:
+                    # This handles the case where arguments is a plain string.
+                    # It's up to the tool_fn to handle `text=arguments` or just `arguments`
+                    # if it expects a single string. The previous `arguments = {"text": arguments}`
+                    # was a specific assumption. Let's stick to the prompt's guidance on
+                    # focusing on name normalization and keeping argument handling as is,
+                    # which means if it's not JSON, it remains a string.
+                    # However, `**arguments` will fail if `arguments` is a string.
+                    # The original code in the file had `arguments = {"text": arguments}`.
+                    # Reinstating that specific handling for non-JSON strings.
                     arguments = {"text": arguments}
-            
-            # Get available functions from tool registry
+
             available_functions = self.tool_registry.get_available_functions()
-            
-            # Look up the function by name
-            tool_fn = available_functions.get(function_name)
+            tool_fn = available_functions.get(normalized_function_name)
+
             if not tool_fn:
-                logger.error(f"Tool function '{function_name}' not found in registry")
+                logger.error(f"Tool function '{original_function_name}' (normalized to '{normalized_function_name}') not found in registry")
                 span.end(status_message="tool_not_found", level="ERROR")
-                return ToolResult(success=False, output=f"Tool function '{function_name}' not found")
+                return ToolResult(success=False, output=f"Tool function '{original_function_name}' not found")
             
-            logger.debug(f"Found tool function for '{function_name}', executing...")
-            result = await tool_fn(**arguments)
-            logger.info(f"Tool execution complete: {function_name} -> {result}")
-            span.end(status_message="tool_executed", output=result)
+            logger.debug(f"Found tool function for '{normalized_function_name}', executing...")
+            # Ensure arguments is a dict here if using **. The logic above should ensure this for JSON strings or wraps plain strings in {"text": ...}.
+            if not isinstance(arguments, dict):
+                 # This case should ideally not be hit if the above logic is correct.
+                 # However, as a safeguard if a tool expects NO arguments and gets a string.
+                 logger.warning(f"Tool arguments for {normalized_function_name} are not a dict ({type(arguments)}), attempting to call without unpacking if empty or passing as is.")
+                 if isinstance(arguments, str): # Tool might expect a single string argument
+                     result = await tool_fn(arguments) # Or tool_fn(text=arguments) - depends on tool signature
+                 else: # Or if arguments is empty/None and tool takes no args
+                     result = await tool_fn()
+            else:
+                result = await tool_fn(**arguments)
+
+            logger.info(f"Tool execution complete: {normalized_function_name} -> {result}")
+            # Ensure result is serializable for span output
+            serializable_result_output = str(result.output) if hasattr(result, 'output') else str(result)
+            span.end(status_message="tool_executed", output={"success": result.success, "output": serializable_result_output} if hasattr(result, 'success') else {"output": serializable_result_output})
             return result
         except Exception as e:
-            logger.error(f"Error executing tool {tool_call['function_name']}: {str(e)}", exc_info=True)
+            # Ensure 'original_function_name' is defined for the error message,
+            # fallback if tool_call doesn't have 'function_name'
+            fn_for_error = tool_call.get("function_name", "unknown_function")
+            logger.error(f"Error executing tool {fn_for_error}: {str(e)}", exc_info=True)
+            # span is defined at the beginning of the method.
             span.end(status_message="tool_execution_error", output=f"Error executing tool: {str(e)}", level="ERROR")
-            return ToolResult(success=False, output=f"Error executing tool: {str(e)}")
+            return ToolResult(success=False, output=f"Error executing tool {fn_for_error}: {str(e)}")
 
     async def _execute_tools(
         self, 
