@@ -9,9 +9,9 @@ import json
 from typing import List, Dict, Any, Optional
 
 from litellm import token_counter, completion_cost
-from backend.services.supabase import DBConnection # Reverted
-from backend.services.llm import make_llm_api_call # Reverted
-from backend.utils.logger import logger # Reverted
+from services.supabase import DBConnection # Direct import
+from services.llm import make_llm_api_call # Direct import
+from utils.logger import logger # Direct import
 
 # Constants for token management
 DEFAULT_TOKEN_THRESHOLD = 120000  # 80k tokens threshold for summarization

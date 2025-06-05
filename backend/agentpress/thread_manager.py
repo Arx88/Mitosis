@@ -12,7 +12,7 @@ This module provides comprehensive conversation management, including:
 
 import json
 from typing import List, Dict, Any, Optional, Type, Union, AsyncGenerator, Literal
-from backend.services.llm import make_llm_api_call # Reverted to backend.
+from services.llm import make_llm_api_call
 from .tool import Tool
 from .tool_registry import ToolRegistry
 from .context_manager import ContextManager
@@ -20,10 +20,10 @@ from .response_processor import (
     ResponseProcessor,
     ProcessorConfig
 )
-from backend.services.supabase import DBConnection # Reverted to backend.
-from backend.utils.logger import logger # Reverted to backend.
+from services.supabase import DBConnection # Direct import from /app
+from utils.logger import logger # Direct import from /app
 from langfuse.client import StatefulGenerationClient, StatefulTraceClient
-from backend.services.langfuse import langfuse # Reverted to backend.
+from services.langfuse import langfuse # Direct import from /app
 import datetime
 
 # Type alias for tool choice

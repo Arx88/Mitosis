@@ -17,8 +17,8 @@ import asyncio
 import aiohttp # Added import
 from openai import OpenAIError
 import litellm
-from backend.utils.logger import logger # Reverted
-from backend.utils.config import config # Reverted
+from utils.logger import logger # Direct import
+from utils.config import config # Direct import
 
 # litellm.set_verbose=True
 litellm.modify_params=True

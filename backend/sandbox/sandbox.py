@@ -2,11 +2,11 @@ from daytona_sdk import Daytona, DaytonaConfig, CreateSandboxParams, Sandbox, Se
 from daytona_api_client.models.workspace_state import WorkspaceState
 from collections import namedtuple # Added import
 from dotenv import load_dotenv
-from backend.utils.logger import logger # Reverted
-from backend.utils.config import config, Configuration, EnvMode # Reverted
+from utils.logger import logger # Direct import
+from utils.config import config, Configuration, EnvMode # Direct import
 from . import local_docker_handler
 import os
-from backend.services.supabase import DBConnection # Reverted
+from services.supabase import DBConnection # Direct import
 from typing import Optional, Dict, List, Any # Added for wrapper classes
 
 # Define this at the module level or within the class if preferred,
