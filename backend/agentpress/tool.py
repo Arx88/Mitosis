@@ -13,7 +13,7 @@ from abc import ABC
 import json
 import inspect
 from enum import Enum
-from ..utils.logger import logger # Relative import
+from backend.utils.logger import logger # Reverted to backend.
 
 class SchemaType(Enum):
     """Enumeration of supported schema types for tool definitions."""

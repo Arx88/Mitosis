@@ -1,14 +1,14 @@
 
 from typing import Optional
 
-from ..agentpress.thread_manager import ThreadManager # Relative import
-from ..agentpress.tool import Tool # Relative import
+from backend.agentpress.thread_manager import ThreadManager # Reverted
+from backend.agentpress.tool import Tool # Reverted
 # Sandbox type can be Daytona's or our wrapper, so using Any for now, or a common base if defined
 from typing import Any
 from .sandbox import get_or_start_sandbox # Relative import
-from ..utils.logger import logger # Relative import
-from ..utils.files_utils import clean_path # Relative import
-from ..utils.config import config # Relative import
+from backend.utils.logger import logger # Reverted
+from backend.utils.files_utils import clean_path # Reverted
+from backend.utils.config import config # Reverted
 
 class SandboxToolsBase(Tool):
     """Base class for all sandbox tools that provides project-based sandbox access."""
