@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import inspect
 from uuid import uuid4
 from typing import Optional
 
@@ -227,6 +228,70 @@ async def run_agent(
         logger.info("Using default system prompt only")
     
     # Add MCP tool information to system prompt if MCP tools are configured
+    # Append descriptions of standard (non-MCP) enabled tools to the system_content
+    standard_tools_info = "\n\n--- Other Available Tools ---\n"
+    standard_tools_info += "You have access to the following tools. Use them by invoking their function name with parameters, like in the examples shown elsewhere in the prompt.\n"
+
+    processed_tool_classes = set()
+    if thread_manager and hasattr(thread_manager, 'tool_registry') and thread_manager.tool_registry:
+        # Group methods by their parent tool instance to avoid repeating class descriptions
+        tool_methods_grouped = {}
+        for method_name, tool_data in thread_manager.tool_registry.tools.items():
+            tool_instance = tool_data.get('instance')
+            if tool_instance and not isinstance(tool_instance, MCPToolWrapper): # Exclude MCPToolWrapper
+                tool_class_name = tool_instance.__class__.__name__
+                if tool_class_name not in tool_methods_grouped:
+                    tool_methods_grouped[tool_class_name] = {'instance': tool_instance, 'methods': []}
+
+                # Check if the method has an OpenAPI schema
+                for schema_obj in tool_data.get('schema_list', [tool_data.get('schema')]): # schema_list or schema
+                    if schema_obj and schema_obj.schema_type == SchemaType.OPENAPI and schema_obj.schema.get('function'):
+                        tool_methods_grouped[tool_class_name]['methods'].append(schema_obj.schema['function'])
+                        break # Found OpenAPI schema for this method
+
+        if not tool_methods_grouped:
+            standard_tools_info += "No standard tools seem to be enabled or registered for you at the moment.\n"
+        else:
+            for tool_class_name, tool_data in tool_methods_grouped.items():
+                tool_instance = tool_data['instance']
+                class_description = inspect.getdoc(tool_instance) or "No description provided for this tool."
+
+                # Only add tool class if it has callable methods with OpenAPI schemas
+                if tool_data['methods']:
+                    standard_tools_info += f"\n**Tool Class: {tool_class_name}**\n"
+                    standard_tools_info += f"   Description: {class_description}\n"
+                    standard_tools_info += f"   Available functions:\n"
+
+                    for func_schema in tool_data['methods']:
+                        func_name = func_schema.get('name', 'UnknownFunction')
+                        func_description = func_schema.get('description', 'No function description.')
+                        standard_tools_info += f"     - `{func_name}`: {func_description}\n"
+
+                        params = func_schema.get('parameters', {}).get('properties', {})
+                        if params:
+                            param_details = []
+                            for param_name, param_info in params.items():
+                                param_desc = param_info.get('description', '')
+                                param_type = param_info.get('type', 'any')
+                                detail = f"{param_name} ({param_type})"
+                                if param_desc:
+                                    detail += f": {param_desc}"
+                                param_details.append(detail)
+                            if param_details:
+                                standard_tools_info += f"       Parameters: {'; '.join(param_details)}\n"
+                        required_params = func_schema.get('parameters', {}).get('required', [])
+                        if required_params:
+                            standard_tools_info += f"       Required: {', '.join(required_params)}\n"
+    else:
+        standard_tools_info += "Tool registry not available or no tools registered.\n"
+
+    # Append this information to the system_content
+    # This ensures it's added regardless of whether a custom or default prompt is used.
+    # We check if it's not already there to prevent massive duplication if run_agent is somehow re-entered (defensive)
+    if "--- Other Available Tools ---" not in system_content:
+        system_content += standard_tools_info
+        logger.info("Appended standard tool descriptions to the system prompt.")
+
     if agent_config and (agent_config.get('configured_mcps') or agent_config.get('custom_mcps')) and mcp_wrapper_instance and mcp_wrapper_instance._initialized:
         mcp_info = "\n\n--- MCP Tools Available ---\n"
         mcp_info += "You have access to external MCP (Model Context Protocol) server tools.\n"
