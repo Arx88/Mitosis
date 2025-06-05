@@ -22,7 +22,7 @@ async def main():
     mock_sandbox_for_tool.process = MagicMock()
     mock_sandbox_for_tool.process.execute.return_value = MagicMock(
         exit_code=0,
-        result='{"success": true, "message": "Navigation successful", "url": "https://example.com", "title": "Example Domain"}'
+        result='{"success": true, "message": "Navigation successful", "url": "https://www.google.com", "title": "Google"}'
     )
 
     # Patch SandboxBrowserTool._ensure_sandbox directly
@@ -40,7 +40,7 @@ async def main():
 
         try:
             # Execute the browser_navigate_to tool
-            result = await browser_tool.browser_navigate_to(url="https://example.com")
+            result = await browser_tool.browser_navigate_to(url="https://www.google.com")
 
             # The 'output' attribute of ToolResult contains the JSON string
             if result and result.output:

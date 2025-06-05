@@ -1,5 +1,6 @@
 from daytona_sdk import Daytona, DaytonaConfig, CreateSandboxParams, Sandbox, SessionExecuteRequest
 from daytona_api_client.models.workspace_state import WorkspaceState
+from collections import namedtuple # Added import
 from dotenv import load_dotenv
 from utils.logger import logger
 from utils.config import config, Configuration, EnvMode
@@ -7,6 +8,10 @@ from . import local_docker_handler
 import os
 from services.supabase import DBConnection # Added DBConnection import
 from typing import Optional, Dict, List, Any # Added for wrapper classes
+
+# Define this at the module level or within the class if preferred,
+# but accessible for type hinting if needed elsewhere.
+ExecResponse = namedtuple("ExecResponse", ["exit_code", "result", "stderr"])
 
 class DaytonaNotConfiguredError(Exception):
     pass
@@ -79,6 +84,18 @@ class LocalDockerProcessWrapper:
             "exit_code": exit_code,
             "is_error": exit_code != 0
         }
+
+    def execute(self, command: str, workdir: str = "/workspace", timeout: int = 60) -> ExecResponse:
+        '''Executes a command directly in the container.'''
+        logger.info(f"[LocalDockerProcess] execute command in {self.container_id} at {workdir}: {command}")
+        stdout_str, stderr_str, exit_code = local_docker_handler.execute_command_in_container(
+            self.container_id,
+            command,
+            workdir=workdir,
+            timeout_seconds=timeout  # Pass the timeout to the handler
+        )
+        # The SandboxBrowserTool expects `response.result` to be the stdout for JSON decoding
+        return ExecResponse(exit_code=exit_code, result=stdout_str, stderr=stderr_str)
 
 load_dotenv()
 
