@@ -129,11 +129,6 @@ class SandboxFilesTool(SandboxToolsBase):
             if self._file_exists(full_path):
                 return self.fail_response(f"File '{file_path}' already exists. Use update_file to modify existing files.")
             
-            # Create parent directories if needed
-            parent_dir = '/'.join(full_path.split('/')[:-1])
-            if parent_dir:
-                self.sandbox.fs.create_folder(parent_dir, "755")
-            
             # Write the file content
             self.sandbox.fs.upload_file(full_path, file_contents.encode())
             self.sandbox.fs.set_file_permissions(full_path, permissions)

@@ -46,11 +46,21 @@ class SandboxBrowserTool(SandboxToolsBase):
             logger.debug("\033[95mExecuting curl command:\033[0m")
             logger.debug(f"{curl_cmd}")
             
-            response = self.sandbox.process.execute(curl_cmd, timeout=30)
+            # Assuming self.sandbox.process.execute now returns (exit_code, (stdout_bytes, stderr_bytes))
+            # as per the implied change in the subtask description.
+            raw_response = self.sandbox.process.execute(curl_cmd, timeout=30)
             
-            if response.exit_code == 0:
+            exit_code = raw_response[0]
+            stdout_bytes = raw_response[1][0] if raw_response[1] else b""
+            stderr_bytes = raw_response[1][1] if raw_response[1] else b""
+
+            stdout_str = stdout_bytes.decode('utf-8', errors='replace') if stdout_bytes else ""
+            stderr_str = stderr_bytes.decode('utf-8', errors='replace') if stderr_bytes else ""
+
+            if exit_code == 0:
                 try:
-                    result = json.loads(response.result)
+                    # Use stdout_str for JSON parsing, which was previously response.result
+                    result = json.loads(stdout_str)
 
                     if endpoint == 'input_text' and result.get("message") and "Element is not an <input>, <textarea>, <select> or [contenteditable]" in result.get("message"):
                         return self.fail_response(
@@ -108,11 +118,18 @@ class SandboxBrowserTool(SandboxToolsBase):
                     return self.success_response(success_response)
 
                 except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse response JSON: {response.result} {e}")
-                    return self.fail_response(f"Failed to parse response JSON: {response.result} {e}")
+                    # Use stdout_str in the error message, previously response.result
+                    logger.error(f"Failed to parse response JSON: {stdout_str} {e}")
+                    return self.fail_response(f"Failed to parse response JSON: {stdout_str} {e}")
             else:
-                logger.error(f"Browser automation request failed 2: {response}")
-                return self.fail_response(f"Browser automation request failed 2: {response}")
+                # Construct a meaningful error message from exit_code, stdout_str, stderr_str
+                error_message = (
+                    f"Browser automation request failed with exit code {exit_code}.\n"
+                    f"Stdout: {stdout_str[:500]}\n"
+                    f"Stderr: {stderr_str[:500]}"
+                )
+                logger.error(error_message)
+                return self.fail_response(error_message)
 
         except Exception as e:
             logger.error(f"Error executing browser action: {e}")
