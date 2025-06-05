@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { parseToolOrThinkXml } from '@/components/thread/tool-views/xml-parser';
 import {
   streamAgent,
   getAgentStatus,
@@ -297,9 +298,34 @@ export function useAgentStream(
       if (status !== 'streaming') updateStatus('streaming');
 
       switch (message.type) {
-        case 'reasoning':
-          setReasoning(parsedContent.content); // Assuming content is directly the reasoning string
+        case 'reasoning': {
+          const content_chunk = parsedContent.content; // Map data.content_chunk to parsedContent.content
+          if (content_chunk) {
+            setReasoning((prev_reasoning_xml) => {
+              // Accumulate the new chunk with the previous XML content
+              const accumulated_xml = (prev_reasoning_xml || "") + content_chunk;
+
+              // If the current chunk contains the closing tag, attempt to parse
+              if (content_chunk.includes('</think>')) {
+                try {
+                  const parsed = parseToolOrThinkXml(accumulated_xml);
+                  // If parsing is successful and provides thinking text, use it
+                  if (parsed && parsed.thinking) {
+                    return parsed.thinking; // Store the clean text
+                  }
+                } catch (e) {
+                  console.error('Error parsing think XML:', e);
+                  // If parsing fails, keep the accumulated XML for debugging.
+                  // Alternatively, could return prev_reasoning_xml or an error indicator.
+                  return accumulated_xml;
+                }
+              }
+              // If no closing tag in the current chunk, just return the accumulated XML
+              return accumulated_xml;
+            });
+          }
           break;
+        }
         case 'assistant':
           console.log('[useAgentStream] test a:', parsedContent.content);
           console.log('[useAgentStream] test a1:', parsedMetadata);
