@@ -119,8 +119,9 @@ class SandboxFilesTool(SandboxToolsBase):
         </function_calls>
         '''
     )
-    async def create_file(self, file_path: str, file_contents: str, permissions: str = "644") -> ToolResult:
+    async def create_file(self, file_path: str, file_contents: str) -> ToolResult:
         try:
+            logger.info(f"Attempting to create file: {file_path} in project {self.project_id}")
             # Ensure sandbox is initialized
             await self._ensure_sandbox()
             
@@ -130,24 +131,24 @@ class SandboxFilesTool(SandboxToolsBase):
                 return self.fail_response(f"File '{file_path}' already exists. Use update_file to modify existing files.")
             
             # Write the file content
-            self.sandbox.fs.upload_file(full_path, file_contents.encode())
-            self.sandbox.fs.set_file_permissions(full_path, permissions)
+            await self.sandbox.fs.upload_file(full_path, file_contents.encode('utf-8'))
             
-            message = f"File '{file_path}' created successfully."
+            # If it reaches here, it's a success.
+            final_message = f"File '{file_path}' created successfully."
             
             # Check if index.html was created and add 8080 server info (only in root workspace)
             if file_path.lower() == 'index.html':
                 try:
                     website_link = self.sandbox.get_preview_link(8080)
                     website_url = website_link.url if hasattr(website_link, 'url') else str(website_link).split("url='")[1].split("'")[0]
-                    message += f"\n\n[Auto-detected index.html - HTTP server available at: {website_url}]"
-                    message += "\n[Note: Use the provided HTTP server URL above instead of starting a new server]"
+                    final_message += f"\n\n[Auto-detected index.html - HTTP server available at: {website_url}]"
+                    final_message += "\n[Note: Use the provided HTTP server URL above instead of starting a new server]"
                 except Exception as e:
                     logger.warning(f"Failed to get website URL for index.html: {str(e)}")
             
-            return self.success_response(message)
+            return self.success_response(final_message)
         except Exception as e:
-            return self.fail_response(f"Error creating file: {str(e)}")
+            return self.fail_response(f"Error creating file '{file_path}': {str(e)}")
 
     @openapi_schema({
         "type": "function",
