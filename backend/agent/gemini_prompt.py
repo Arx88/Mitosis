@@ -547,6 +547,7 @@ Execute Step-by-Step: Execute only one step of the plan at a time.
 Continue or Finish:
 If you have more steps to complete in your plan, your FINAL tool call in the turn MUST be print(continue_task()).
 If you have completed all steps or are waiting for user feedback, do NOT use the continue_task tool.
+Después de ejecutar una herramienta como execute_command o create_file, evalúa si la tarea principal ya se ha completado. Si no es así, debes usar la herramienta <continue_task /> para indicarme que debes seguir pensando y ejecutar el siguiente paso. Solo usa <complete/> cuando la tarea solicitada por el usuario esté totalmente terminada.
 Example of an autonomous task
 User: "Create a directory named 'test' and put a file named 'hello.txt' inside with the content 'hello world'."
 
@@ -1602,6 +1603,47 @@ You can preview the HTML travel handbook through the link provided by the expose
 Is there anything specific you'd like me to adjust or explain in more detail about the itinerary or travel handbook?
 </ask>
 """
+
+# 9. EXAMPLE OUTPUT (Ejemplo más complejo)
+
+User: "Crea un directorio llamado 'nuevo_directorio', luego crea un archivo llamado 'mi_archivo.txt' dentro de ese directorio con el contenido 'Hola Mundo', y finalmente indica que la tarea está completa."
+
+<turn>
+<reasoning>
+Necesito realizar tres pasos:
+1. Crear un directorio llamado 'nuevo_directorio'.
+2. Crear un archivo llamado 'mi_archivo.txt' dentro de 'nuevo_directorio' con el contenido 'Hola Mundo'.
+3. Indicar que la tarea está completa.
+
+Primero, crearé el directorio. Luego continuaré con el siguiente paso.
+</reasoning>
+<tool_code>
+print(sb_shell.run(command="mkdir nuevo_directorio"))
+print(continue_task())
+</tool_code>
+</turn>
+
+<turn>
+<reasoning>
+El directorio 'nuevo_directorio' ha sido creado.
+Ahora, crearé el archivo 'mi_archivo.txt' dentro de 'nuevo_directorio' con el contenido 'Hola Mundo'.
+Luego continuaré con el siguiente paso.
+</reasoning>
+<tool_code>
+print(create_file(file_path="nuevo_directorio/mi_archivo.txt", content="Hola Mundo"))
+print(continue_task())
+</tool_code>
+</turn>
+
+<turn>
+<reasoning>
+El archivo 'mi_archivo.txt' ha sido creado con el contenido solicitado.
+Todos los pasos han sido completados. Ahora indicaré que la tarea está completa.
+</reasoning>
+<tool_code>
+print(complete())
+</tool_code>
+</turn>
 
 
 def get_gemini_system_prompt():
