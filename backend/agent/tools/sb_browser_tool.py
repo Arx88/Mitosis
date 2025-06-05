@@ -52,6 +52,13 @@ class SandboxBrowserTool(SandboxToolsBase):
                 try:
                     result = json.loads(response.result)
 
+                    if endpoint == 'input_text' and result.get("message") and "Element is not an <input>, <textarea>, <select> or [contenteditable]" in result.get("message"):
+                        return self.fail_response(
+                            "Action failed: The element targeted for text input is not an input field. "
+                            "Please ensure the element is an <input>, <textarea>, <select>, or has [contenteditable] attribute. "
+                            "You can use `browser_list_interactive_elements` to get a list of suitable elements."
+                        )
+
                     if not "content" in result:
                         result["content"] = ""
                     
@@ -944,3 +951,33 @@ class SandboxBrowserTool(SandboxToolsBase):
         """
         logger.debug(f"\033[95mClicking at coordinates: ({x}, {y})\033[0m")
         return await self._execute_browser_action("click_coordinates", {"x": x, "y": y})
+
+    @openapi_schema({
+        "type": "function",
+        "function": {
+            "name": "browser_list_interactive_elements",
+            "description": "Lists all interactive elements on the current page suitable for text input, such as <input>, <textarea>, <select>, or elements with [contenteditable] attribute. Returns a list of elements with their indices, types, and current values if applicable.",
+            "parameters": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    })
+    @xml_schema(
+        tag_name="browser-list-interactive-elements",
+        mappings=[],
+        example='''
+        <function_calls>
+        <invoke name="browser_list_interactive_elements">
+        </invoke>
+        </function_calls>
+        '''
+    )
+    async def browser_list_interactive_elements(self) -> ToolResult:
+        """Lists all interactive elements on the current page
+
+        Returns:
+            dict: Result of the execution
+        """
+        logger.debug(f"\033[95mListing interactive elements\033[0m")
+        return await self._execute_browser_action("list_interactive_elements", {})
