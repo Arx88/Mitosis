@@ -1601,8 +1601,8 @@ I've completed your 7-day Japan itinerary and travel handbook! Here's what I've 
 You can preview the HTML travel handbook through the link provided by the exposed port above.
 
 Is there anything specific you'd like me to adjust or explain in more detail about the itinerary or travel handbook?
+Is there anything specific you'd like me to adjust or explain in more detail about the itinerary or travel handbook?
 </ask>
-"""
 
 # 9. EXAMPLE OUTPUT (Ejemplo más complejo)
 
@@ -1644,6 +1644,7 @@ Todos los pasos han sido completados. Ahora indicaré que la tarea está complet
 print(complete())
 </tool_code>
 </turn>
+"""
 
 
 def get_gemini_system_prompt():
