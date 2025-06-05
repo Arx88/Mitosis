@@ -62,97 +62,101 @@ class SandboxBrowserTool(SandboxToolsBase):
                 stdout_str = temp_stdout.decode('utf-8', errors='replace')
             elif isinstance(temp_stdout, str):
                 stdout_str = temp_stdout
-            else: # Handle None or other unexpected types
+            else:
+                logger.warning(f"Unexpected type for stdout_bytes: {type(temp_stdout)}. Value: {temp_stdout}")
                 stdout_str = ""
 
             if isinstance(temp_stderr, bytes):
                 stderr_str = temp_stderr.decode('utf-8', errors='replace')
             elif isinstance(temp_stderr, str):
                 stderr_str = temp_stderr
-            else: # Handle None or other unexpected types
+            else:
+                logger.warning(f"Unexpected type for stderr_bytes: {type(temp_stderr)}. Value: {temp_stderr}")
                 stderr_str = ""
 
             logger.debug(f"SandboxBrowserTool: exit_code: {exit_code}")
-            logger.debug(f"SandboxBrowserTool: stdout_str before JSON parsing: '{stdout_str}'")
+            # logger.debug(f"SandboxBrowserTool: stdout_str before JSON parsing: '{stdout_str}'") # Removed as per request
             logger.debug(f"SandboxBrowserTool: stderr_str: '{stderr_str}'")
 
             if exit_code == 0:
-                # Log the exact stdout_str before parsing
-                logger.debug(f"Attempting to parse JSON from stdout_str: '{stdout_str}'")
+                # stdout_str is defined from the previous step
+                stripped_stdout_str = stdout_str.strip() # Keep stripping for the actual parsing
 
-                # Strip leading/trailing whitespace
-                stripped_stdout_str = stdout_str.strip()
+                # Crucial log requested by user
+                logger.debug(f"SandboxBrowserTool: Attempting to parse JSON from stdout_str: '{stdout_str}'") # Log CRUCIAL
 
-                # Check if the string looks like a JSON object
-                if not stripped_stdout_str.startswith('{') or not stripped_stdout_str.endswith('}'):
-                    logger.error(f"Response from internal browser service is not a valid JSON object: {stripped_stdout_str}")
-                    return self.fail_response(
-                        f"Response from internal browser service was not as expected. Received: {stripped_stdout_str}"
-                    )
+                if not stdout_str or not stripped_stdout_str: # Check if original or stripped string is empty
+                    logger.warning("SandboxBrowserTool: stdout_str is empty, cannot parse JSON.")
+                    return self.fail_response("Empty response from browser service.")
+
+                if not (stripped_stdout_str.startswith('{') and stripped_stdout_str.endswith('}')):
+                    logger.warning(f"SandboxBrowserTool: stdout_str does not look like a JSON object: '{stdout_str}'")
+                    return self.fail_response(f"Unexpected non-JSON response from browser service: {stdout_str[:200]}")
 
                 try:
                     # Use stripped_stdout_str for JSON parsing
-                    result = json.loads(stripped_stdout_str)
+                    response_json = json.loads(stripped_stdout_str)
 
-                    if endpoint == 'input_text' and result.get("message") and "Element is not an <input>, <textarea>, <select> or [contenteditable]" in result.get("message"):
+                    if endpoint == 'input_text' and response_json.get("message") and "Element is not an <input>, <textarea>, <select> or [contenteditable]" in response_json.get("message"):
                         return self.fail_response(
                             "Action failed: The element targeted for text input is not an input field. "
                             "Please ensure the element is an <input>, <textarea>, <select>, or has [contenteditable] attribute. "
                             "You can use `browser_list_interactive_elements` to get a list of suitable elements."
                         )
 
-                    if not "content" in result:
-                        result["content"] = ""
+                    if not "content" in response_json:
+                        response_json["content"] = ""
                     
-                    if not "role" in result:
-                        result["role"] = "assistant"
+                    if not "role" in response_json:
+                        response_json["role"] = "assistant"
 
                     logger.info("Browser automation request completed successfully")
 
-                    if "screenshot_base64" in result:
+                    if "screenshot_base64" in response_json:
                         try:
-                            image_url = await upload_base64_image(result["screenshot_base64"])
-                            result["image_url"] = image_url
-                            # Remove base64 data from result to keep it clean
-                            del result["screenshot_base64"]
+                            image_url = await upload_base64_image(response_json["screenshot_base64"])
+                            response_json["image_url"] = image_url
+                            # Remove base64 data from response_json to keep it clean
+                            del response_json["screenshot_base64"]
                             logger.debug(f"Uploaded screenshot to {image_url}")
                         except Exception as e:
                             logger.error(f"Failed to upload screenshot: {e}")
-                            result["image_upload_error"] = str(e)
+                            response_json["image_upload_error"] = str(e)
 
                     added_message = await self.thread_manager.add_message(
                         thread_id=self.thread_id,
                         type="browser_state",
-                        content=result,
+                        content=response_json,
                         is_llm_message=False
                     )
 
                     success_response = {
                         "success": True,
-                        "message": result.get("message", "Browser action completed successfully")
+                        "message": response_json.get("message", "Browser action completed successfully")
                     }
 
                     if added_message and 'message_id' in added_message:
                         success_response['message_id'] = added_message['message_id']
-                    if result.get("url"):
-                        success_response["url"] = result["url"]
-                    if result.get("title"):
-                        success_response["title"] = result["title"]
-                    if result.get("element_count"):
-                        success_response["elements_found"] = result["element_count"]
-                    if result.get("pixels_below"):
-                        success_response["scrollable_content"] = result["pixels_below"] > 0
-                    if result.get("ocr_text"):
-                        success_response["ocr_text"] = result["ocr_text"]
-                    if result.get("image_url"):
-                        success_response["image_url"] = result["image_url"]
+                    if response_json.get("url"):
+                        success_response["url"] = response_json["url"]
+                    if response_json.get("title"):
+                        success_response["title"] = response_json["title"]
+                    if response_json.get("element_count"):
+                        success_response["elements_found"] = response_json["element_count"]
+                    if response_json.get("pixels_below"):
+                        success_response["scrollable_content"] = response_json["pixels_below"] > 0
+                    if response_json.get("ocr_text"):
+                        success_response["ocr_text"] = response_json["ocr_text"]
+                    if response_json.get("image_url"):
+                        success_response["image_url"] = response_json["image_url"]
 
                     return self.success_response(success_response)
 
                 except json.JSONDecodeError as e:
-                    # Log the problematic stdout_str along with the error
-                    logger.error(f"Failed to parse response JSON. stdout_str: '{stripped_stdout_str}'. Error: {e}")
-                    return self.fail_response(f"Failed to parse response JSON: {stripped_stdout_str}. Error: {e}")
+                    logger.error(f"SandboxBrowserTool: Failed to parse response JSON. Raw stdout_str: '{stdout_str}'. Error: {e}")
+                    # The fail_response can still use stripped_stdout_str or raw stdout_str as preferred for brevity in user message.
+                    # Let's keep it consistent with the log for now.
+                    return self.fail_response(f"Failed to parse response JSON. Raw response: {stdout_str[:500]}. Error: {e}")
             else:
                 # Construct a meaningful error message from exit_code, stdout_str, stderr_str
                 error_message = (
