@@ -1,11 +1,11 @@
 import traceback
 import json
 
-from agentpress.tool import ToolResult, openapi_schema, xml_schema
-from agentpress.thread_manager import ThreadManager
-from sandbox.tool_base import SandboxToolsBase
-from utils.logger import logger
-from utils.s3_upload_utils import upload_base64_image
+from backend.agentpress.tool import ToolResult, openapi_schema, xml_schema # Adjusted import
+from backend.agentpress.thread_manager import ThreadManager # Adjusted import
+from backend.sandbox.tool_base import SandboxToolsBase # Adjusted import
+from backend.utils.logger import logger # Adjusted import
+from backend.utils.s3_upload_utils import upload_base64_image # Adjusted import
 
 
 class SandboxBrowserTool(SandboxToolsBase):
@@ -77,9 +77,22 @@ class SandboxBrowserTool(SandboxToolsBase):
             logger.debug(f"SandboxBrowserTool: stderr_str: '{stderr_str}'")
 
             if exit_code == 0:
+                # Log the exact stdout_str before parsing
+                logger.debug(f"Attempting to parse JSON from stdout_str: '{stdout_str}'")
+
+                # Strip leading/trailing whitespace
+                stripped_stdout_str = stdout_str.strip()
+
+                # Check if the string looks like a JSON object
+                if not stripped_stdout_str.startswith('{') or not stripped_stdout_str.endswith('}'):
+                    logger.error(f"Response from internal browser service is not a valid JSON object: {stripped_stdout_str}")
+                    return self.fail_response(
+                        f"Response from internal browser service was not as expected. Received: {stripped_stdout_str}"
+                    )
+
                 try:
-                    # Use stdout_str for JSON parsing, which was previously response.result
-                    result = json.loads(stdout_str)
+                    # Use stripped_stdout_str for JSON parsing
+                    result = json.loads(stripped_stdout_str)
 
                     if endpoint == 'input_text' and result.get("message") and "Element is not an <input>, <textarea>, <select> or [contenteditable]" in result.get("message"):
                         return self.fail_response(
@@ -137,9 +150,9 @@ class SandboxBrowserTool(SandboxToolsBase):
                     return self.success_response(success_response)
 
                 except json.JSONDecodeError as e:
-                    # Use stdout_str in the error message, previously response.result
-                    logger.error(f"Failed to parse response JSON: {stdout_str} {e}")
-                    return self.fail_response(f"Failed to parse response JSON: {stdout_str} {e}")
+                    # Log the problematic stdout_str along with the error
+                    logger.error(f"Failed to parse response JSON. stdout_str: '{stripped_stdout_str}'. Error: {e}")
+                    return self.fail_response(f"Failed to parse response JSON: {stripped_stdout_str}. Error: {e}")
             else:
                 # Construct a meaningful error message from exit_code, stdout_str, stderr_str
                 error_message = (
