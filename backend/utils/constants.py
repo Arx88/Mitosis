@@ -143,3 +143,5 @@ MODEL_NAME_ALIASES = {
     # "qwen/qwen3-235b-a22b": "openrouter/qwen/qwen3-235b-a22b",
     # "xai/grok-3-mini-fast-beta": "xai/grok-3-mini-fast-beta",  # Commented out in constants.py
 }
+
+MODEL_TO_USE_FALLBACK_FOR_NAMING = "openrouter/google/gemini-2.5-flash-preview-05-20"

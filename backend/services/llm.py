@@ -14,6 +14,7 @@ from typing import Union, Dict, Any, Optional, AsyncGenerator, List
 import os
 import json
 import asyncio
+import aiohttp # Added import
 from openai import OpenAIError
 import litellm
 from utils.logger import logger
@@ -354,6 +355,51 @@ async def make_llm_api_call(
         error_msg += f". Last error: {str(last_error)}"
     logger.error(error_msg, exc_info=True)
     raise LLMRetryError(error_msg)
+
+async def is_ollama_model_available(model_name: str) -> bool:
+    """
+    Checks if a given Ollama model is available by querying the Ollama API.
+
+    Args:
+        model_name: The unprefixed Ollama model name (e.g., "gemma3:27b").
+
+    Returns:
+        True if the model is available, False otherwise.
+    """
+    if not config.OLLAMA_API_BASE:
+        logger.warning("OLLAMA_API_BASE is not configured. Cannot check Ollama model availability.")
+        return False
+
+    url = f"{config.OLLAMA_API_BASE}/api/tags"
+    logger.debug(f"Checking Ollama model availability for '{model_name}' at {url}")
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    models = data.get("models", [])
+                    for model_info in models:
+                        if model_info.get("name") == model_name:
+                            logger.info(f"Ollama model '{model_name}' is available.")
+                            return True
+                    logger.warning(f"Ollama model '{model_name}' not found in available models list.")
+                    return False
+                else:
+                    logger.warning(
+                        f"Failed to fetch Ollama models. Status: {response.status}, "
+                        f"Response: {await response.text()}"
+                    )
+                    return False
+    except aiohttp.ClientConnectorError as e:
+        logger.warning(f"Connection error while checking Ollama model '{model_name}': {e}")
+        return False
+    except asyncio.TimeoutError: # Make sure asyncio is imported if not already
+        logger.warning(f"Timeout while checking Ollama model '{model_name}'.")
+        return False
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while checking Ollama model '{model_name}': {e}", exc_info=True)
+        return False
 
 # Initialize API keys on module import
 setup_api_keys()

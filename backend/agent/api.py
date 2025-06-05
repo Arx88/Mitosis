@@ -19,9 +19,9 @@ from utils.logger import logger
 from services.billing import check_billing_status, can_use_model
 from utils.config import config, EnvMode
 from sandbox.sandbox import create_sandbox, get_or_start_sandbox, LocalDockerSandboxWrapper
-from services.llm import make_llm_api_call
+from services.llm import make_llm_api_call, is_ollama_model_available
 from run_agent_background import run_agent_background, _cleanup_redis_response_list, update_agent_run_status
-from utils.constants import MODEL_NAME_ALIASES
+from utils.constants import MODEL_NAME_ALIASES, MODEL_TO_USE_FALLBACK_FOR_NAMING
 
 # Initialize shared resources
 router = APIRouter()
@@ -810,11 +810,22 @@ async def generate_and_update_project_name(project_id: str, prompt: str):
             return # Exit early
 
         # === New logic to automatically prefix ollama/ if needed ===
+        original_model_name_for_naming_logic = model_name_to_use # Store before potential prefixing
         if '/' not in model_name_to_use:
-            original_model_for_log = model_name_to_use
             model_name_to_use = f"ollama/{model_name_to_use}"
-            logger.info(f"Assuming Ollama provider for unprefixed MODEL_TO_USE ('{original_model_for_log}'). Using '{model_name_to_use}' for project naming.")
+            logger.info(f"Assuming Ollama provider for unprefixed MODEL_TO_USE ('{original_model_name_for_naming_logic}'). Using '{model_name_to_use}' for project naming.")
         # === End of new logic ===
+
+        # === Ollama availability check and fallback for project naming ===
+        if model_name_to_use.startswith("ollama/"):
+            unprefixed_ollama_model_name = model_name_to_use.split('/', 1)[1]
+            if not await is_ollama_model_available(unprefixed_ollama_model_name):
+                logger.warning(
+                    f"Configured MODEL_TO_USE '{model_name_to_use}' for project naming is not available in Ollama. "
+                    f"Falling back to '{MODEL_TO_USE_FALLBACK_FOR_NAMING}'."
+                )
+                model_name_to_use = MODEL_TO_USE_FALLBACK_FOR_NAMING
+        # === End of Ollama availability check ===
 
         # Proceed with LLM-based naming if model_name_to_use is set
         system_prompt = "You are a helpful assistant that generates extremely concise titles (2-4 words maximum) for chat threads based on the user's message. Respond with only the title, no other text or punctuation."
