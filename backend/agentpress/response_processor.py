@@ -15,13 +15,13 @@ import asyncio
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple, Union, Callable, Literal
 from dataclasses import dataclass
-from backend.utils.logger import logger # Adjusted import
-from backend.agentpress.tool import ToolResult # Adjusted import
-from backend.agentpress.tool_registry import ToolRegistry # Adjusted import
-from backend.agentpress.xml_tool_parser import XMLToolParser # Adjusted import
+from ..utils.logger import logger # Relative import
+from .tool import ToolResult # Relative import
+from .tool_registry import ToolRegistry # Relative import
+from .xml_tool_parser import XMLToolParser # Relative import
 from langfuse.client import StatefulTraceClient
-from backend.services.langfuse import langfuse # Adjusted import
-from backend.agentpress.utils.json_helpers import ( # Adjusted import
+from ..services.langfuse import langfuse # Relative import
+from .utils.json_helpers import ( # Relative import
     ensure_dict, ensure_list, safe_json_parse, 
     to_json_string, format_for_yield
 )
