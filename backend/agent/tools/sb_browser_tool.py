@@ -63,7 +63,7 @@ class SandboxBrowserTool(SandboxToolsBase):
             elif isinstance(temp_stdout, str):
                 stdout_str = temp_stdout
             else:
-                logger.warning(f"Unexpected type for stdout_bytes: {type(temp_stdout)}. Value: {temp_stdout}")
+                logger.warning(f"SandboxBrowserTool: stdout_bytes is neither bytes nor str: {type(temp_stdout)}. Using empty string.")
                 stdout_str = ""
 
             if isinstance(temp_stderr, bytes):
@@ -71,7 +71,7 @@ class SandboxBrowserTool(SandboxToolsBase):
             elif isinstance(temp_stderr, str):
                 stderr_str = temp_stderr
             else:
-                logger.warning(f"Unexpected type for stderr_bytes: {type(temp_stderr)}. Value: {temp_stderr}")
+                logger.warning(f"SandboxBrowserTool: stderr_bytes is neither bytes nor str: {type(temp_stderr)}. Using empty string.")
                 stderr_str = ""
 
             logger.debug(f"SandboxBrowserTool: exit_code: {exit_code}")
@@ -86,12 +86,12 @@ class SandboxBrowserTool(SandboxToolsBase):
                 logger.debug(f"SandboxBrowserTool: Attempting to parse JSON from stdout_str: '{stdout_str}'") # Log CRUCIAL
 
                 if not stdout_str or not stripped_stdout_str: # Check if original or stripped string is empty
-                    logger.warning("SandboxBrowserTool: stdout_str is empty, cannot parse JSON.")
+                    logger.error("SandboxBrowserTool: stdout_str is empty or only whitespace, cannot parse JSON.")
                     return self.fail_response("Empty response from browser service.")
 
                 if not (stripped_stdout_str.startswith('{') and stripped_stdout_str.endswith('}')):
-                    logger.warning(f"SandboxBrowserTool: stdout_str does not look like a JSON object: '{stdout_str}'")
-                    return self.fail_response(f"Unexpected non-JSON response from browser service: {stdout_str[:200]}")
+                    logger.error(f"SandboxBrowserTool: stdout_str does not appear to be a JSON object: '{stdout_str}'")
+                    return self.fail_response(f"Response from browser service was not valid JSON: {stdout_str[:200]}")
 
                 try:
                     # Use stripped_stdout_str for JSON parsing
@@ -154,9 +154,7 @@ class SandboxBrowserTool(SandboxToolsBase):
 
                 except json.JSONDecodeError as e:
                     logger.error(f"SandboxBrowserTool: Failed to parse response JSON. Raw stdout_str: '{stdout_str}'. Error: {e}")
-                    # The fail_response can still use stripped_stdout_str or raw stdout_str as preferred for brevity in user message.
-                    # Let's keep it consistent with the log for now.
-                    return self.fail_response(f"Failed to parse response JSON. Raw response: {stdout_str[:500]}. Error: {e}")
+                    return self.fail_response(f"Failed to parse response JSON: {e}. Raw output: {stdout_str[:200]}")
             else:
                 # Construct a meaningful error message from exit_code, stdout_str, stderr_str
                 error_message = (
