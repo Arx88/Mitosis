@@ -432,7 +432,7 @@ async def run_agent(
                 llm_temperature=0,
                 llm_max_tokens=max_tokens,
                 tool_choice="auto",
-                max_xml_tool_calls=1,
+                max_xml_tool_calls=10,
                 temporary_message=temporary_message,
                 processor_config=ProcessorConfig(
                     xml_tool_calling=True,
@@ -544,26 +544,24 @@ async def run_agent(
 
                     yield chunk
 
-                # Check if we should stop based on the last tool call or error
+                # NUEVA LÓGICA MÁS ROBUSTA Y SENCILLA
                 if error_detected:
                     logger.info(f"Stopping due to error detected in response stream for iteration {iteration_count}.")
                     trace.event(name="stopping_due_to_error_detected_in_response", level="DEFAULT", status_message=(f"Stopping due to error detected in response stream for iteration {iteration_count}."))
                     generation.end(output=full_response, status_message="error_detected_in_stream", level="ERROR")
-                    continue_execution = False # Stop the main loop
-                elif agent_should_terminate: # This is set if 'ask' or 'complete' is used
+                    continue_execution = False # Detener el bucle principal
+                elif agent_should_terminate: # Esto se activa si se usa 'ask' o 'complete'
                     logger.info(f"Agent is stopping in iteration {iteration_count} because 'ask' or 'complete' tool was used (last_tool_name: {last_tool_name}).")
                     trace.event(name="agent_terminated_by_ask_or_complete", level="DEFAULT", status_message=(f"Agent stopped with tool: {last_tool_name}"))
                     generation.end(output=full_response, status_message="agent_stopped_ask_complete")
                     continue_execution = False
-                elif last_tool_name == "continue_task":
-                    logger.info(f"Agent used 'continue_task' in iteration {iteration_count}. Continuing to next step.")
-                    trace.event(name="agent_continue_task", level="DEFAULT", status_message=(f"Agent continuing with last_tool_name: {last_tool_name}"))
-                    # continue_execution remains True, loop will continue
                 else:
-                    logger.info(f"Agent is stopping in iteration {iteration_count} because 'continue_task' was not the last tool (last_tool_name: '{last_tool_name}').")
-                    trace.event(name="agent_stopped_no_continue_task", level="DEFAULT", status_message=(f"Agent stopping, last tool: {last_tool_name}"))
-                    generation.end(output=full_response, status_message=f"agent_stopped_no_continue_task_last_tool:{last_tool_name}")
-                    continue_execution = False
+                    # Si no hay error y no se usó una herramienta de terminación, el agente debe continuar.
+                    # Ya no necesitamos comprobar 'continue_task'.
+                    logger.info(f"Agent finished iteration {iteration_count} with tool '{last_tool_name}'. Continuing to next iteration.")
+                    trace.event(name="agent_iteration_complete_continue", level="DEFAULT", status_message=(f"Agent continuing after tool: {last_tool_name}"))
+                    generation.end(output=full_response, status_message=f"agent_continued_ok_last_tool:{last_tool_name}")
+                    # No hacemos nada con continue_execution, por lo que el bucle `while` seguirá ejecutándose.
 
             except Exception as e:
                 # Just log the error and re-raise to stop all iterations
