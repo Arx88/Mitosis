@@ -12,18 +12,18 @@ This module provides comprehensive conversation management, including:
 
 import json
 from typing import List, Dict, Any, Optional, Type, Union, AsyncGenerator, Literal
-from backend.services.llm import make_llm_api_call # Adjusted import
-from backend.agentpress.tool import Tool # Adjusted import
-from backend.agentpress.tool_registry import ToolRegistry # Adjusted import
-from backend.agentpress.context_manager import ContextManager # Adjusted import
-from backend.agentpress.response_processor import ( # Adjusted import
+from ..services.llm import make_llm_api_call
+from .tool import Tool
+from .tool_registry import ToolRegistry
+from .context_manager import ContextManager
+from .response_processor import (
     ResponseProcessor,
     ProcessorConfig
 )
-from backend.services.supabase import DBConnection # Adjusted import
-from backend.utils.logger import logger # Adjusted import
+from ..services.supabase import DBConnection
+from ..utils.logger import logger
 from langfuse.client import StatefulGenerationClient, StatefulTraceClient
-from backend.services.langfuse import langfuse # Adjusted import
+from ..services.langfuse import langfuse
 import datetime
 
 # Type alias for tool choice

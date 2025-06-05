@@ -1,11 +1,11 @@
 import traceback
 import json
 
-from backend.agentpress.tool import ToolResult, openapi_schema, xml_schema # Adjusted import
-from backend.agentpress.thread_manager import ThreadManager # Adjusted import
-from backend.sandbox.tool_base import SandboxToolsBase # Adjusted import
-from backend.utils.logger import logger # Adjusted import
-from backend.utils.s3_upload_utils import upload_base64_image # Adjusted import
+from ...agentpress.tool import ToolResult, openapi_schema, xml_schema # Relative import
+from ...agentpress.thread_manager import ThreadManager # Relative import
+from ...sandbox.tool_base import SandboxToolsBase # Relative import
+from ...utils.logger import logger # Relative import
+from ...utils.s3_upload_utils import upload_base64_image # Relative import
 
 
 class SandboxBrowserTool(SandboxToolsBase):

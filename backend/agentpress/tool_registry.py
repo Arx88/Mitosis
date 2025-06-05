@@ -1,6 +1,6 @@
 from typing import Dict, Type, Any, List, Optional, Callable
-from backend.agentpress.tool import Tool, SchemaType # Adjusted import
-from backend.utils.logger import logger # Adjusted import
+from .tool import Tool, SchemaType # Relative import
+from ..utils.logger import logger # Relative import
 
 
 class ToolRegistry:
