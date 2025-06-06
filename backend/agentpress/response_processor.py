@@ -1439,7 +1439,7 @@ class ResponseProcessor:
                     # Let's keep it simple: if it's a string, it will be passed as the first positional arg later if not ** unpacked.
                     pass # Arguments remain as string or dict
 
-            logger.info(f"Attempting to determine Pydantic class for tool '{original_function_name}', method '{tool_fn.__name__}'.")
+            # logger.info(f"Attempting to determine Pydantic class for tool '{original_function_name}', method '{tool_fn.__name__}'.") # Removed
             pydantic_class_to_use = None
             attempt_pydantic_call = False
 
@@ -1447,45 +1447,45 @@ class ResponseProcessor:
                 sig = inspect.signature(tool_fn)
                 if 'parameters' in sig.parameters:
                     param_annotation = sig.parameters['parameters'].annotation
-                    logger.info(f"DEBUG_PARAMS: 'run' method's 'parameters' annotation: {param_annotation}, type: {type(param_annotation)}")
+                    # logger.info(f"DEBUG_PARAMS: 'run' method's 'parameters' annotation: {param_annotation}, type: {type(param_annotation)}") # Removed
 
                     # Scenario 1: Annotation is directly a Pydantic class
                     if inspect.isclass(param_annotation) and hasattr(param_annotation, 'model_fields'):
                         pydantic_class_to_use = param_annotation
-                        logger.info(f"DEBUG_PARAMS: Using annotation '{pydantic_class_to_use.__name__}' directly as Pydantic class.")
+                        # logger.info(f"DEBUG_PARAMS: Using annotation '{pydantic_class_to_use.__name__}' directly as Pydantic class.") # Removed
 
                     # Scenario 2: Annotation might be a decorator (wrapper function/method)
                     elif callable(param_annotation):
-                        logger.info(f"DEBUG_PARAMS: Annotation is callable. Logging its attributes: dir={dir(param_annotation)}") # Log dir()
-                        logger.info(f"DEBUG_PARAMS: Checking for __wrapped__ on annotation or if it's the 'parameters_schema' attribute itself.")
+                        # logger.info(f"DEBUG_PARAMS: Annotation is callable. Logging its attributes: dir={dir(param_annotation)}") # Removed
+                        # logger.info(f"DEBUG_PARAMS: Checking for __wrapped__ on annotation or if it's the 'parameters_schema' attribute itself.") # Removed
                         if hasattr(param_annotation, '__wrapped__') and inspect.isclass(param_annotation.__wrapped__) and hasattr(param_annotation.__wrapped__, 'model_fields'):
                             pydantic_class_to_use = param_annotation.__wrapped__
-                            logger.info(f"DEBUG_PARAMS: Unwrapped Pydantic class '{pydantic_class_to_use.__name__}' from annotation's __wrapped__ attribute.")
+                            # logger.info(f"DEBUG_PARAMS: Unwrapped Pydantic class '{pydantic_class_to_use.__name__}' from annotation's __wrapped__ attribute.") # Removed
                         elif hasattr(tool_instance, 'parameters_schema'):
                             schema_attr = tool_instance.parameters_schema
-                            logger.info(f"DEBUG_PARAMS: Fallback check: tool_instance.parameters_schema is {schema_attr}, type: {type(schema_attr)}")
+                            # logger.info(f"DEBUG_PARAMS: Fallback check: tool_instance.parameters_schema is {schema_attr}, type: {type(schema_attr)}") # Removed
                             if inspect.isclass(schema_attr) and hasattr(schema_attr, 'model_fields'): # Should ideally not be the decorator if different from param_annotation
                                 pydantic_class_to_use = schema_attr
-                                logger.info(f"DEBUG_PARAMS: Using tool_instance.parameters_schema '{pydantic_class_to_use.__name__}' directly as Pydantic class.")
+                                # logger.info(f"DEBUG_PARAMS: Using tool_instance.parameters_schema '{pydantic_class_to_use.__name__}' directly as Pydantic class.") # Removed
                             elif callable(schema_attr): # If schema_attr is also the decorator
-                                logger.info(f"DEBUG_PARAMS: tool_instance.parameters_schema is also callable. Logging its attributes: dir={dir(schema_attr)}") # Log dir()
+                                # logger.info(f"DEBUG_PARAMS: tool_instance.parameters_schema is also callable. Logging its attributes: dir={dir(schema_attr)}") # Removed
                                 if hasattr(schema_attr, '__wrapped__') and inspect.isclass(schema_attr.__wrapped__) and hasattr(schema_attr.__wrapped__, 'model_fields'):
                                     pydantic_class_to_use = schema_attr.__wrapped__
-                                    logger.info(f"DEBUG_PARAMS: Unwrapped Pydantic class '{pydantic_class_to_use.__name__}' from tool_instance.parameters_schema.__wrapped__.")
+                                    # logger.info(f"DEBUG_PARAMS: Unwrapped Pydantic class '{pydantic_class_to_use.__name__}' from tool_instance.parameters_schema.__wrapped__.") # Removed
                                 else:
-                                    logger.warning(f"DEBUG_PARAMS: tool_instance.parameters_schema is callable but does not have a recognized __wrapped__ Pydantic class.")
+                                    pass # logger.warning(f"DEBUG_PARAMS: tool_instance.parameters_schema is callable but does not have a recognized __wrapped__ Pydantic class.") # Removed
                             else:
-                                logger.warning(f"DEBUG_PARAMS: tool_instance.parameters_schema is not a direct Pydantic class or a recognized callable wrapper.")
+                                pass # logger.warning(f"DEBUG_PARAMS: tool_instance.parameters_schema is not a direct Pydantic class or a recognized callable wrapper.") # Removed
                         else:
-                            logger.warning(f"DEBUG_PARAMS: Annotation is callable but not a recognized Pydantic wrapper, and no tool_instance.parameters_schema found.")
+                            pass # logger.warning(f"DEBUG_PARAMS: Annotation is callable but not a recognized Pydantic wrapper, and no tool_instance.parameters_schema found.") # Removed
                     else:
-                        logger.warning(f"DEBUG_PARAMS: Annotation for 'parameters' is not a class or callable. Type: {type(param_annotation)}")
+                        pass # logger.warning(f"DEBUG_PARAMS: Annotation for 'parameters' is not a class or callable. Type: {type(param_annotation)}") # Removed
 
                     if pydantic_class_to_use:
                         attempt_pydantic_call = True
-                        logger.info(f"DEBUG_PARAMS: Will attempt Pydantic model instantiation for {pydantic_class_to_use.__name__}.")
+                        # logger.info(f"DEBUG_PARAMS: Will attempt Pydantic model instantiation for {pydantic_class_to_use.__name__}.") # Removed
                     else:
-                        logger.warning(f"DEBUG_PARAMS: Could not determine Pydantic class for 'parameters' argument of '{original_function_name}'. Will attempt direct call.")
+                        pass # logger.warning(f"DEBUG_PARAMS: Could not determine Pydantic class for 'parameters' argument of '{original_function_name}'. Will attempt direct call.") # Removed
                 else:
                     logger.warning(f"Method 'run' for {original_function_name} does not have a 'parameters' argument. Will attempt direct call.")
 
