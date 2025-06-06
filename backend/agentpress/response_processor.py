@@ -1329,61 +1329,132 @@ class ResponseProcessor:
 
         try:
             original_function_name = tool_call["function_name"]
-            arguments = tool_call["arguments"]
+            arguments = tool_call.get("arguments", {}) # arguments are from the LLM
+            xml_tag_name_from_call = tool_call.get("xml_tag_name")
 
-            # Normalize the function name for lookup
-            normalized_function_name = original_function_name.replace('-', '_')
+            tool_fn = None
+            tool_instance = None
+            # Keep track of how tool was found for pydantic model retrieval later
+            openapi_tool_info = None
+            xml_tool_info = None
 
-            logger.info(f"Executing tool: {original_function_name} (normalized to {normalized_function_name}) with arguments: {arguments}")
-            self.trace.event(name="executing_tool", level="DEFAULT", status_message=(f"Executing tool: {original_function_name} (normalized to {normalized_function_name}) with arguments: {arguments}"))
-            
-            if isinstance(arguments, str):
-                try:
-                    arguments = safe_json_parse(arguments)
-                except json.JSONDecodeError:
-                    # This handles the case where arguments is a plain string.
-                    # It's up to the tool_fn to handle `text=arguments` or just `arguments`
-                    # if it expects a single string. The previous `arguments = {"text": arguments}`
-                    # was a specific assumption. Let's stick to the prompt's guidance on
-                    # focusing on name normalization and keeping argument handling as is,
-                    # which means if it's not JSON, it remains a string.
-                    # However, `**arguments` will fail if `arguments` is a string.
-                    # The original code in the file had `arguments = {"text": arguments}`.
-                    # Reinstating that specific handling for non-JSON strings.
-                    arguments = {"text": arguments}
-
-            available_functions = self.tool_registry.get_available_functions()
-            tool_fn = available_functions.get(normalized_function_name)
+            if xml_tag_name_from_call:
+                # Attempt to find the tool using the XML tag name registry first
+                xml_tool_info = self.tool_registry.get_xml_tool(xml_tag_name_from_call)
+                if xml_tool_info:
+                    tool_instance = xml_tool_info.get("instance")
+                    method_name = xml_tool_info.get("method") # This is the actual Python method name
+                    if tool_instance and method_name:
+                        tool_fn = getattr(tool_instance, method_name, None)
+                        if tool_fn:
+                            logger.info(f"Found XML tool via tag '{xml_tag_name_from_call}' mapped to method '{method_name}' of {tool_instance.__class__.__name__}")
+                        else:
+                            logger.warning(f"Method '{method_name}' not found in instance for XML tag '{xml_tag_name_from_call}'")
+                    else:
+                        logger.warning(f"Instance or method name missing for XML tag '{xml_tag_name_from_call}' in registry.")
+                else:
+                    logger.warning(f"No direct mapping found for XML tag '{xml_tag_name_from_call}'. Will attempt direct/normalized name lookup.")
 
             if not tool_fn:
-                logger.error(f"Tool function '{original_function_name}' (normalized to '{normalized_function_name}') not found in registry")
+                # Fallback or direct (e.g., native OpenAPI) tool call
+                # For native calls, original_function_name is the one to use (might have hyphens)
+                # For XML fallback, original_function_name is the XML tag, which needs normalization
+                normalized_lookup_name = original_function_name.replace('-', '_')
+
+                openapi_tool_info = self.tool_registry.get_tool(normalized_lookup_name)
+                if openapi_tool_info:
+                    tool_instance = openapi_tool_info.get("instance")
+                    if tool_instance:
+                        # The method name should match the normalized_lookup_name used for registry
+                        tool_fn = getattr(tool_instance, normalized_lookup_name, None)
+                        if tool_fn:
+                            logger.info(f"Found OpenAPI/fallback tool via direct/normalized name lookup: '{normalized_lookup_name}'")
+                        else:
+                            logger.warning(f"Method '{normalized_lookup_name}' not found in instance for direct/fallback tool.")
+                    else:
+                        logger.warning(f"Instance not found for direct/fallback tool '{normalized_lookup_name}'.")
+                else:
+                    logger.warning(f"No direct/fallback tool info for '{normalized_lookup_name}'. This might be an issue if it's not an XML tool with a valid mapping.")
+
+            if not tool_fn:
+                logger.error(f"Tool function '{original_function_name}' (attempted as XML tag '{xml_tag_name_from_call}' and direct name '{original_function_name.replace('-', '_')}') not found in registry")
                 span.end(status_message="tool_not_found", level="ERROR")
                 return ToolResult(success=False, output=f"Tool function '{original_function_name}' not found")
-            
-            logger.debug(f"Found tool function for '{normalized_function_name}', executing...")
-            # Ensure arguments is a dict here if using **. The logic above should ensure this for JSON strings or wraps plain strings in {"text": ...}.
-            if not isinstance(arguments, dict):
-                 # This case should ideally not be hit if the above logic is correct.
-                 # However, as a safeguard if a tool expects NO arguments and gets a string.
-                 logger.warning(f"Tool arguments for {normalized_function_name} are not a dict ({type(arguments)}), attempting to call without unpacking if empty or passing as is.")
-                 if isinstance(arguments, str): # Tool might expect a single string argument
-                     result = await tool_fn(arguments) # Or tool_fn(text=arguments) - depends on tool signature
-                 else: # Or if arguments is empty/None and tool takes no args
-                     result = await tool_fn()
-            else:
-                result = await tool_fn(**arguments)
 
-            logger.info(f"Tool execution complete: {normalized_function_name} -> {result}")
-            # Ensure result is serializable for span output
+            # Argument parsing and Pydantic model validation (can remain largely the same)
+            # The key is to get the correct pydantic_model based on how the tool was found.
+            pydantic_model = None
+            if xml_tool_info and xml_tool_info.get("pydantic_model"): # Prefer model from XML info if tool found that way
+                pydantic_model = xml_tool_info["pydantic_model"]
+            elif openapi_tool_info and openapi_tool_info.get("pydantic_model"): # Else use model from OpenAPI info
+                pydantic_model = openapi_tool_info["pydantic_model"]
+            
+            if pydantic_model:
+                logger.debug(f"Attempting to validate arguments with Pydantic model: {pydantic_model.__name__}")
+                try:
+                    # Ensure arguments is a dictionary for Pydantic validation
+                    if not isinstance(arguments, dict):
+                        # This case might occur if LLM sends non-JSON string for a tool expecting structured input
+                        # Or for simple XML tools where arguments might be a single text content
+                        # Pydantic expects a dict for model_validate.
+                        # If it's a simple string and the model expects a single field (e.g. 'text'),
+                        # we might need to wrap it, or the model definition should handle it.
+                        # For now, if it's not a dict, validation will likely fail or needs specific model design.
+                        logger.warning(f"Arguments are not a dict ({type(arguments)}), Pydantic validation might fail or be skipped if model expects specific structure.")
+                        if isinstance(arguments, str) and len(pydantic_model.model_fields) == 1:
+                             # If model has one field, try to pass the string to that field
+                             field_name = list(pydantic_model.model_fields.keys())[0]
+                             arguments = {field_name: arguments}
+                             logger.debug(f"Wrapped string argument into {{'{field_name}': ...}} for Pydantic.")
+                        # If not a string or not a single field model, it will likely fail validation or be passed as is if no pydantic_model
+
+                    if isinstance(arguments, dict): # Proceed only if arguments is a dict
+                        validated_args = pydantic_model.model_validate(arguments)
+                        arguments = validated_args.model_dump() # Use validated and serialized arguments
+                        logger.debug(f"Arguments validated and dumped by Pydantic: {arguments}")
+                    else:
+                        # If arguments is not a dict, and not wrapped above, Pydantic validation is skipped.
+                        # The tool function will receive arguments as they are.
+                        logger.warning(f"Skipping Pydantic validation as arguments is not a dictionary for model {pydantic_model.__name__}.")
+
+                except Exception as e: # Catch Pydantic ValidationError or others
+                    logger.error(f"Argument validation failed for {original_function_name} with model {pydantic_model.__name__}: {str(e)}")
+                    span.end(status_message="argument_validation_failed", level="ERROR")
+                    return ToolResult(success=False, output=f"Argument validation failed: {str(e)}")
+            else:
+                logger.info(f"No Pydantic model found for {original_function_name}, proceeding without Pydantic validation. Ensure arguments are correctly structured if they are dicts.")
+                # If arguments is a string and no Pydantic model, it's passed as is.
+                # If it's a dict, it's passed as is.
+                if isinstance(arguments, str):
+                    # This was the original handling for string arguments when no Pydantic model was involved (or before pydantic part)
+                    # arguments = {"text": arguments} # This might be too specific if the tool doesn't expect {"text":...}
+                    # Let's pass the string directly if the tool_fn is designed to take a single string.
+                    # If it expects **kwargs, this will fail.
+                    # The most robust way is for tools to define their expected parameters.
+                    # For now, if no Pydantic, and it's a string, we assume it might be a single arg.
+                    # This part is tricky without knowing the tool's signature.
+                    # The original code before this change had a specific `arguments = {"text": arguments}`.
+                    # Let's keep it simple: if it's a string, it will be passed as the first positional arg later if not ** unpacked.
+                    pass # Arguments remain as string or dict
+
+            logger.debug(f"Executing {original_function_name} with processed arguments: {arguments}")
+
+            # Execute the tool function
+            # If arguments is a dict, unpack it. If it's a single string (and no pydantic model was used to wrap it),
+            # this will pass it as the first positional argument. This relies on the tool function's signature.
+            if isinstance(arguments, dict):
+                result = await tool_fn(**arguments)
+            else: # Assumes string or other non-dict type, passed as single argument
+                result = await tool_fn(arguments)
+
+
+            logger.info(f"Tool execution complete: {original_function_name} -> {result}")
             serializable_result_output = str(result.output) if hasattr(result, 'output') else str(result)
             span.end(status_message="tool_executed", output={"success": result.success, "output": serializable_result_output} if hasattr(result, 'success') else {"output": serializable_result_output})
             return result
         except Exception as e:
-            # Ensure 'original_function_name' is defined for the error message,
-            # fallback if tool_call doesn't have 'function_name'
             fn_for_error = tool_call.get("function_name", "unknown_function")
             logger.error(f"Error executing tool {fn_for_error}: {str(e)}", exc_info=True)
-            # span is defined at the beginning of the method.
             span.end(status_message="tool_execution_error", output=f"Error executing tool: {str(e)}", level="ERROR")
             return ToolResult(success=False, output=f"Error executing tool {fn_for_error}: {str(e)}")
 
