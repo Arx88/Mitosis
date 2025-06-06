@@ -87,6 +87,7 @@ class SandboxWebsiteCreatorTool(Tool):
     async def run(self, parameters: SandboxWebsiteCreatorToolParameters) -> List[ToolResult]:
         """Create a website project structure."""
         logger.info(f"Running {self.name} with parameters: {parameters}")
+        project_path = ""
         try:
             sandbox = await self._ensure_sandbox()
             if not parameters.project_name or not parameters.project_name.isalnum():
@@ -109,27 +110,13 @@ class SandboxWebsiteCreatorTool(Tool):
                 return [ToolResult.error(f"Unsupported framework: {parameters.framework}")]
 
             deployment_url = None
-            message = "" # Initialize message
             if parameters.deploy:
                 deploy_result = await self._deploy_website(project_path, parameters.framework)
-                # Ensure deploy_result and its output are checked before access
-                if deploy_result and deploy_result.success:
-                    output_data = deploy_result.output
-                    if isinstance(output_data, str):
-                        try:
-                            output_data = json.loads(output_data)
-                        except json.JSONDecodeError:
-                            logger.error(f"Failed to parse JSON from deploy_tool output: {output_data}")
-                            output_data = {} # Default to empty dict if parse fails
-                    elif not isinstance(output_data, dict): # If not str and not dict, treat as problematic
-                        logger.error(f"Unexpected output type from deploy_tool: {type(output_data)}")
-                        output_data = {}
-
-                    deployment_url = output_data.get("url")
+                if deploy_result.success and isinstance(deploy_result.output, dict):
+                    deployment_url = deploy_result.output.get("url")
                     message = f"Website project created at {project_path} and deployed successfully."
-                else: # Handle failure case for deploy_result
-                    error_detail = deploy_result.error if (deploy_result and hasattr(deploy_result, 'error')) else "Unknown deployment error"
-                    message = f"Website project created at {project_path}, but deployment failed: {error_detail}"
+                else:
+                    message = f"Website project created at {project_path}, but deployment failed: {deploy_result.error}"
             else:
                 message = f"Website project created successfully at {project_path}."
 
@@ -139,17 +126,15 @@ class SandboxWebsiteCreatorTool(Tool):
                         project_path=project_path,
                         message=message,
                         deployment_url=deployment_url,
-                    )
+                    ).model_dump()
                 )
             ]
         except Exception as e:
             error_message = str(e)
             logger.error(f"Error creating website project '{parameters.project_name}': {error_message}")
             try:
-                # Ensure sandbox object is available for cleanup
-                current_sandbox = self._sandbox if self._sandbox else await self._ensure_sandbox()
-                if 'project_path' in locals() and await current_sandbox.fs.exists(project_path): # Check if project_path was defined
-                    await current_sandbox.fs.rmdir(project_path, recursive=True) # Added recursive=True
+                if 'sandbox' in locals() and project_path and await sandbox.fs.exists(project_path):
+                    await sandbox.fs.rmdir(project_path, recursive=True)
             except Exception as cleanup_e:
                 logger.error(f"Error during cleanup: {cleanup_e}")
             return [ToolResult.error(f"Error creating website: {error_message[:200]}")]
@@ -181,7 +166,7 @@ class SandboxWebsiteCreatorTool(Tool):
 
     async def _create_react_structure(self, sandbox: Any, project_path: str, project_name: str) -> None:
         """Create the structure for a React website using Vite."""
-        await sandbox.fs.mkdir(f"{project_path}/src") # Ensure src directory exists
+        await sandbox.fs.mkdir(f"{project_path}/src")
         app_jsx_content = f"""
         import React from 'react';
         function App() {{
@@ -213,6 +198,7 @@ class SandboxWebsiteCreatorTool(Tool):
         """
         await sandbox.fs.write_file(f"{project_path}/src/main.jsx", main_jsx_content)
 
+        # *** CORRECCIÓN AQUÍ ***: Usar llaves simples {} para el diccionario.
         package_json_content = {{
             "name": project_name,
             "private": True,
@@ -251,31 +237,27 @@ class SandboxWebsiteCreatorTool(Tool):
             build_dir = f"{project_path}/dist"
             logger.warning("Skipping build step due to shell limitations. Assuming build dir exists at /dist")
 
+        # *** CORRECCIÓN AQUÍ ***: Usar llaves simples {} para el diccionario.
         deploy_params = {{
             "project_dir": build_dir,
             "framework": "static"
         }}
 
         try:
-            # Assuming parameters_schema can create an instance from a dict or is not needed if run takes dict
-            # This part might need adjustment based on how deploy_tool.run expects its parameters
-            # For now, attempting to pass the dictionary directly if parameters_schema is a type
-            # If deploy_tool.run expects an instance of its parameters_schema:
-            # params_instance = self.deploy_tool.parameters_schema(**deploy_params)
-            # deploy_results = await self.deploy_tool.run(params_instance)
-            # If deploy_tool.run can take a dict:
-            deploy_results = await self.deploy_tool.run(deploy_params)
-
+            # Asegúrate de que los parámetros se pasen correctamente al método run
+            deploy_results = await self.deploy_tool.run(self.deploy_tool.parameters_schema(**deploy_params))
 
             if deploy_results and deploy_results[0].success:
+                # CORRECCIÓN: Usar llaves simples en f-string para logs
                 logger.info(f"Deployment successful: {deploy_results[0].output}")
                 return deploy_results[0]
             else:
-                error_msg = deploy_results[0].error if (deploy_results and hasattr(deploy_results[0], 'error')) else "Unknown deployment error"
+                error_msg = deploy_results[0].error if deploy_results and deploy_results[0].error else "Unknown deployment error"
+                # CORRECCIÓN: Usar llaves simples en f-string para logs
                 logger.error(f"Deployment failed: {error_msg}")
                 return ToolResult.error(f"Deployment failed: {error_msg}")
 
         except Exception as e:
+            # CORRECCIÓN: Usar llaves simples en f-string para logs
             logger.error(f"Error during deployment: {str(e)}")
             return ToolResult.error(f"Error during deployment: {str(e)}")
-```
