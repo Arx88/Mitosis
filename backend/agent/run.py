@@ -11,6 +11,7 @@ from agent.tools.document_generation_tool import SandboxDocumentGenerationTool
 from agent.tools.sb_deploy_tool import SandboxDeployTool
 from agent.tools.sb_expose_tool import SandboxExposeTool
 from agent.tools.web_search_tool import SandboxWebSearchTool
+from agent.tools.deep_research_tool_updated import DeepResearchToolUpdated
 from dotenv import load_dotenv
 from utils.config import config
 
@@ -112,6 +113,7 @@ async def run_agent(
         thread_manager.add_tool(SandboxWebSearchTool, project_id=project_id, thread_manager=thread_manager)
         thread_manager.add_tool(SandboxVisionTool, project_id=project_id, thread_id=thread_id, thread_manager=thread_manager)
         thread_manager.add_tool(SandboxDocumentGenerationTool, project_id=project_id, thread_manager=thread_manager)
+        thread_manager.add_tool(DeepResearchToolUpdated, project_id=project_id, thread_manager=thread_manager)
         if config.RAPID_API_KEY:
             thread_manager.add_tool(DataProvidersTool)
     else:
@@ -133,9 +135,12 @@ async def run_agent(
             thread_manager.add_tool(SandboxWebSearchTool, project_id=project_id, thread_manager=thread_manager)
         if enabled_tools.get('sb_vision_tool', {}).get('enabled', False):
             thread_manager.add_tool(SandboxVisionTool, project_id=project_id, thread_id=thread_id, thread_manager=thread_manager)
-        if enabled_tools.get('sandbox_document_generation_tool', {}).get('enabled', False):
+        if enabled_tools.get('sandbox_document_generation_tool', {}).get('enabled', False): # Note: Key might be 'sb_document_generation_tool' based on tools.ts
             thread_manager.add_tool(SandboxDocumentGenerationTool, project_id=project_id, thread_manager=thread_manager)
-            logger.info("Registered SandboxDocumentGenerationTool for custom agent.") # Optional: Add a log
+            logger.info("Registered SandboxDocumentGenerationTool for custom agent.")
+        if enabled_tools.get('deep_research_tool_updated', {}).get('enabled', False): # Key changed here
+            thread_manager.add_tool(DeepResearchToolUpdated, project_id=project_id, thread_manager=thread_manager)
+            logger.info("Registered DeepResearchToolUpdated for custom agent.")
         if config.RAPID_API_KEY and enabled_tools.get('data_providers_tool', {}).get('enabled', False):
             thread_manager.add_tool(DataProvidersTool)
 
