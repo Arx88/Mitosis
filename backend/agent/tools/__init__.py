@@ -4,27 +4,23 @@ from .data_providers_tool import DataProvidersTool
 from .document_generation_tool import SandboxDocumentGenerationTool
 from .expand_msg_tool import ExpandMessageTool
 from .message_tool import MessageTool
-from .sb_browser_tool import ComputerUseTool
+from .sb_browser_tool import SandboxBrowserTool # Was ComputerUseTool
 from .update_agent_tool import UpdateAgentTool
-from .web_search_tool import WebSearchTool
-# INICIO DE MODIFICACIÓN
-from .deep_research_tool_updated import SandboxDeepResearchTool
-from .website_creator_tool_updated import SandboxWebsiteCreatorTool
-# FIN DE MODIFICACIÓN
+from .web_search_tool import SandboxWebSearchTool # Was WebSearchTool
+from .deep_research_tool_updated import SandboxDeepResearchTool # New
+from .website_creator_tool_updated import SandboxWebsiteCreatorTool # New
 
 default_tools: list[Tool] = [
-    WebSearchTool(),
-    ComputerUseTool(),
-    ContinueTaskTool(),
-    MessageTool(),
-    UpdateAgentTool(),
-    DataProvidersTool(),
-    ExpandMessageTool(), # Corrected
-    SandboxDocumentGenerationTool(), # Corrected
-    # INICIO DE MODIFICACIÓN
-    SandboxDeepResearchTool(),
-    SandboxWebsiteCreatorTool(),
-    # FIN DE MODIFICACIÓN
+    SandboxWebSearchTool(),       # Corrected from WebSearchTool
+    SandboxBrowserTool(),       # Corrected from ComputerUseTool
+    ContinueTaskTool(),           # Correct
+    MessageTool(),                # Correct
+    UpdateAgentTool(),            # Correct
+    DataProvidersTool(),          # Correct
+    ExpandMessageTool(),          # Already Corrected
+    SandboxDocumentGenerationTool(),# Already Corrected
+    SandboxDeepResearchTool(),    # New
+    SandboxWebsiteCreatorTool(),  # New
 ]
 
 __all__ = ["default_tools", "Tool"]
