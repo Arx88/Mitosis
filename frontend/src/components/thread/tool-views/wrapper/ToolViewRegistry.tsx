@@ -76,6 +76,7 @@ const defaultRegistry: ToolViewRegistryType = {
   'document-generation': DocumentGenerationToolView, // Fallback or alternative name
   // INICIO DE MODIFICACIÓN
   'deep_researcher': DeepResearchToolView,
+  'deep-research': DeepResearchToolView, // Added new entry
   'website_creator': WebsiteCreatorToolView,
   // FIN DE MODIFICACIÓN
 

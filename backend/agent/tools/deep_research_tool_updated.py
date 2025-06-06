@@ -16,9 +16,9 @@ from agent.tools.document_generation_tool import SandboxDocumentGenerationTool
 logger = logging.getLogger(__name__)
 
 @openapi_schema
-class SandboxDeepResearchToolParameters:
+class DeepResearchToolUpdatedParameters:
     """
-    Parameters for the SandboxDeepResearchTool.
+    Parameters for the DeepResearchToolUpdated.
     """
     # Description: The research topic or question to investigate in detail.
     topic: str
@@ -33,9 +33,9 @@ class SandboxDeepResearchToolParameters:
         extra = "forbid"
 
 @openapi_schema
-class SandboxDeepResearchToolOutput:
+class DeepResearchToolUpdatedOutput:
     """
-    Output for the SandboxDeepResearchTool.
+    Output for the DeepResearchToolUpdated.
     """
     # Description: The path to the generated research report within the sandbox environment.
     report_path: str
@@ -47,16 +47,16 @@ class SandboxDeepResearchToolOutput:
     class Config:
         extra = "forbid"
 
-class SandboxDeepResearchTool(Tool):
+class DeepResearchToolUpdated(Tool):
     """Tool for performing deep research on topics by combining web search, content analysis, and information synthesis."""
 
-    name = "DeepSearchTool"
+    name = "DeepResearch"
     description = (
         "A tool for performing deep research on topics by searching multiple sources, "
         "analyzing content, and synthesizing information into a comprehensive report."
     )
-    parameters_schema = SandboxDeepResearchToolParameters
-    output_schema = SandboxDeepResearchToolOutput
+    parameters_schema = DeepResearchToolUpdatedParameters
+    output_schema = DeepResearchToolUpdatedOutput
 
     # NOTE: project_id, thread_manager (and thread_id if applicable) are Optional to allow default instantiation.
     def __init__(
@@ -117,14 +117,14 @@ class SandboxDeepResearchTool(Tool):
         return self._sandbox
 
     @xml_schema(
-        tag_name="deep_search",
+        tag_name="deep-research",
         # Parameters are passed as a Pydantic model 'parameters',
         # so explicit mapping for each field might not be needed here
         # if the framework handles Pydantic models automatically with openapi_schema.
         # The example will show how parameters are expected within the 'parameters' object.
         example='''
         <function_calls>
-          <invoke name="deep_search">
+          <invoke name="deep-research">
             <parameters>
               <topic>Future of renewable energy</topic>
               <depth>standard</depth>
@@ -135,7 +135,7 @@ class SandboxDeepResearchTool(Tool):
         </function_calls>
         '''
     )
-    async def run(self, parameters: SandboxDeepResearchToolParameters) -> List[ToolResult]:
+    async def run(self, parameters: DeepResearchToolUpdatedParameters) -> List[ToolResult]:
         """
         Perform deep research on a topic by searching multiple sources, analyzing content, and synthesizing information.
 
@@ -192,7 +192,7 @@ class SandboxDeepResearchTool(Tool):
             # Return success with the report path and metadata
             return [
                 ToolResult(
-                    output=SandboxDeepResearchToolOutput(
+                    output=DeepResearchToolUpdatedOutput(
                         report_path=report_path,
                         message=f"Research on '{parameters.topic}' completed successfully.",
                         sources_analyzed=len(analyzed_content),
