@@ -13,6 +13,10 @@ export const DEFAULT_AGENTPRESS_TOOLS: Record<string, { enabled: boolean; descri
         icon: '📄',
         color: 'bg-purple-100 dark:bg-purple-800/50'
     },
+    // INICIO DE MODIFICACIÓN
+    'deep_researcher': { enabled: false, description: 'Performs deep research on a topic and generates a report.', icon: '📚', color: 'bg-teal-100 dark:bg-teal-800/50' },
+    'website_creator': { enabled: false, description: 'Creates and deploys a complete website from a description.', icon: '🛠️', color: 'bg-sky-100 dark:bg-sky-800/50' },
+    // FIN DE MODIFICACIÓN
 };
 
 export const getToolDisplayName = (toolName: string): string => {
@@ -26,6 +30,10 @@ export const getToolDisplayName = (toolName: string): string => {
       'sb_vision_tool': 'Image Processing',
       'data_providers_tool': 'Data Providers',
       'sb_document_generation_tool': 'Document Generation',
+      // INICIO DE MODIFICACIÓN
+      'deep_researcher': 'Deep Research',
+      'website_creator': 'Website Creator',
+      // FIN DE MODIFICACIÓN
     };
     
     return displayNames[toolName] || toolName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
