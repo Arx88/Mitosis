@@ -5,7 +5,7 @@ import asyncio
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 
-from agentpress.tool import Tool, ToolResult, openapi_schema, xml_schema
+from agentpress.tool import Tool, ToolResult, openapi_schema # xml_schema removed
 from agentpress.thread_manager import ThreadManager
 
 # Import necessary tools that we'll use
@@ -20,29 +20,16 @@ class SandboxWebsiteCreatorToolParameters:
     """
     Parameters for the SandboxWebsiteCreatorTool.
     """
-    project_name: str = xml_schema(
-        description="The name for the website project. This will be used for the directory name.",
-        tag_name="project_name",
-    )
-    framework: str = xml_schema(
-        description="The framework to use for the website (e.g., 'static', 'react', 'vue', 'nextjs').",
-        tag_name="framework",
-        default="static",
-    )
-    description: str = xml_schema(
-        description="A brief description of the website's purpose and content.",
-        tag_name="description",
-    )
-    pages: List[str] = xml_schema(
-        description="A list of page names to create (e.g., ['home', 'about', 'contact']).",
-        tag_name="pages",
-        default=["index"],
-    )
-    deploy: bool = xml_schema(
-        description="Whether to automatically deploy the website after creation.",
-        tag_name="deploy",
-        default=False,
-    )
+    # Description: The name for the website project. This will be used for the directory name.
+    project_name: str
+    # Description: The framework to use for the website (e.g., 'static', 'react', 'vue', 'nextjs').
+    framework: str = "static"
+    # Description: A brief description of the website's purpose and content.
+    description: str
+    # Description: A list of page names to create (e.g., ['home', 'about', 'contact']).
+    pages: List[str] = ["index"]
+    # Description: Whether to automatically deploy the website after creation.
+    deploy: bool = False
 
     class Config:
         extra = "forbid"
@@ -52,19 +39,12 @@ class SandboxWebsiteCreatorToolOutput:
     """
     Output for the SandboxWebsiteCreatorTool.
     """
-    project_path: str = xml_schema(
-        description="The path to the created website project within the sandbox environment.",
-        tag_name="project_path",
-    )
-    message: str = xml_schema(
-        description="A message indicating the result of the website creation process.",
-        tag_name="message",
-    )
-    deployment_url: Optional[str] = xml_schema(
-        description="The URL of the deployed website, if deployment was requested and successful.",
-        tag_name="deployment_url",
-        default=None,
-    )
+    # Description: The path to the created website project within the sandbox environment.
+    project_path: str
+    # Description: A message indicating the result of the website creation process.
+    message: str
+    # Description: The URL of the deployed website, if deployment was requested and successful.
+    deployment_url: Optional[str] = None
 
     class Config:
         extra = "forbid"
