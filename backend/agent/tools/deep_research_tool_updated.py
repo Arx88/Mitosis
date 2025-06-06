@@ -6,7 +6,6 @@ from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 
 from agentpress.tool import Tool, ToolResult, openapi_schema, xml_schema
-from sandbox.tool_base import SandboxToolsBase
 from agentpress.thread_manager import ThreadManager
 
 # Import necessary tools that we'll use
@@ -17,7 +16,7 @@ from agent.tools.document_generation_tool import SandboxDocumentGenerationTool
 logger = logging.getLogger(__name__)
 
 @openapi_schema
-class SandboxDeepResearchToolParameters(SandboxToolsBase.SandboxFileOperationMixin):
+class SandboxDeepResearchToolParameters:
     """
     Parameters for the SandboxDeepResearchTool.
     """
@@ -45,7 +44,7 @@ class SandboxDeepResearchToolParameters(SandboxToolsBase.SandboxFileOperationMix
         extra = "forbid"
 
 @openapi_schema
-class SandboxDeepResearchToolOutput(SandboxToolsBase.SandboxFileOperationMixin):
+class SandboxDeepResearchToolOutput:
     """
     Output for the SandboxDeepResearchTool.
     """

@@ -6,7 +6,6 @@ from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 
 from agentpress.tool import Tool, ToolResult, openapi_schema, xml_schema
-from sandbox.tool_base import SandboxToolsBase
 from agentpress.thread_manager import ThreadManager
 
 # Import necessary tools that we'll use
@@ -17,7 +16,7 @@ from agent.tools.sb_deploy_tool import SandboxDeployTool
 logger = logging.getLogger(__name__)
 
 @openapi_schema
-class SandboxWebsiteCreatorToolParameters(SandboxToolsBase.SandboxFileOperationMixin):
+class SandboxWebsiteCreatorToolParameters:
     """
     Parameters for the SandboxWebsiteCreatorTool.
     """
@@ -49,7 +48,7 @@ class SandboxWebsiteCreatorToolParameters(SandboxToolsBase.SandboxFileOperationM
         extra = "forbid"
 
 @openapi_schema
-class SandboxWebsiteCreatorToolOutput(SandboxToolsBase.SandboxFileOperationMixin):
+class SandboxWebsiteCreatorToolOutput:
     """
     Output for the SandboxWebsiteCreatorTool.
     """
