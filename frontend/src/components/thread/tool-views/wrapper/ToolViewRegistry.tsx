@@ -16,6 +16,10 @@ import { CompleteToolView } from '../CompleteToolView';
 import { ExecuteDataProviderCallToolView } from '../data-provider-tool/ExecuteDataProviderCallToolView';
 import { DataProviderEndpointsToolView } from '../data-provider-tool/DataProviderEndpointsToolView';
 import { DocumentGenerationToolView } from '../DocumentGenerationToolView';
+// INICIO DE MODIFICACIÓN
+import { DeepResearchToolView } from '../DeepResearchToolView';
+import { WebsiteCreatorToolView } from '../WebsiteCreatorToolView';
+// FIN DE MODIFICACIÓN
 
 
 export type ToolViewComponent = React.ComponentType<ToolViewProps>;
@@ -70,6 +74,10 @@ const defaultRegistry: ToolViewRegistryType = {
   // Custom tools
   'SandboxDocumentGenerationTool': DocumentGenerationToolView, // Assuming this is the name passed from backend
   'document-generation': DocumentGenerationToolView, // Fallback or alternative name
+  // INICIO DE MODIFICACIÓN
+  'deep_researcher': DeepResearchToolView,
+  'website_creator': WebsiteCreatorToolView,
+  // FIN DE MODIFICACIÓN
 
   'default': GenericToolView,
 };
