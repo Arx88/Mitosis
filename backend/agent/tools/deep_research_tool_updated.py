@@ -5,7 +5,7 @@ import asyncio
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 
-from agentpress.tool import Tool, ToolResult, openapi_schema, xml_schema
+from agentpress.tool import Tool, ToolResult, openapi_schema # xml_schema removed
 from agentpress.thread_manager import ThreadManager
 
 # Import necessary tools that we'll use
@@ -20,25 +20,14 @@ class SandboxDeepResearchToolParameters:
     """
     Parameters for the SandboxDeepResearchTool.
     """
-    topic: str = xml_schema(
-        description="The research topic or question to investigate in detail.",
-        tag_name="topic",
-    )
-    depth: str = xml_schema(
-        description="The depth of research to perform: 'basic' (quick overview), 'standard' (comprehensive research), or 'deep' (exhaustive analysis).",
-        tag_name="depth",
-        default="standard",
-    )
-    sources: int = xml_schema(
-        description="The minimum number of sources to include in the research. More sources provide more comprehensive results.",
-        tag_name="sources",
-        default=5,
-    )
-    format: str = xml_schema(
-        description="The format of the final research report.",
-        tag_name="format",
-        default="markdown",
-    )
+    # Description: The research topic or question to investigate in detail.
+    topic: str
+    # Description: The depth of research to perform: 'basic' (quick overview), 'standard' (comprehensive research), or 'deep' (exhaustive analysis).
+    depth: str = "standard"
+    # Description: The minimum number of sources to include in the research. More sources provide more comprehensive results.
+    sources: int = 5
+    # Description: The format of the final research report.
+    format: str = "markdown"
 
     class Config:
         extra = "forbid"
@@ -48,18 +37,12 @@ class SandboxDeepResearchToolOutput:
     """
     Output for the SandboxDeepResearchTool.
     """
-    report_path: str = xml_schema(
-        description="The path to the generated research report within the sandbox environment.",
-        tag_name="report_path",
-    )
-    message: str = xml_schema(
-        description="A message indicating the result of the research process.",
-        tag_name="message",
-    )
-    sources_analyzed: int = xml_schema(
-        description="The number of sources analyzed during the research.",
-        tag_name="sources_analyzed",
-    )
+    # Description: The path to the generated research report within the sandbox environment.
+    report_path: str
+    # Description: A message indicating the result of the research process.
+    message: str
+    # Description: The number of sources analyzed during the research.
+    sources_analyzed: int
 
     class Config:
         extra = "forbid"
