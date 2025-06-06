@@ -118,9 +118,9 @@ class ToolRegistry:
         Returns:
             Dict containing tool instance, method name, and schema
         """
-        logger.debug(f"Attempting to get XML tool for tag: '{tag_name}'. Available XML tags: {list(self.xml_tools.keys())}")
+        # logger.debug(f"Attempting to get XML tool for tag: '{tag_name}'. Available XML tags: {list(self.xml_tools.keys())}")
         tool = self.xml_tools.get(tag_name, {})
-        logger.debug(f"Retrieved tool info for tag '{tag_name}': {tool}")
+        # logger.debug(f"Retrieved tool info for tag '{tag_name}': {tool}")
         if not tool:
             logger.warning(f"XML tool not found for tag: {tag_name}")
         return tool
