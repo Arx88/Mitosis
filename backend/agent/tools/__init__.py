@@ -15,7 +15,6 @@ default_tools: list[Tool] = [
     SandboxBrowserTool(),       # Corrected from ComputerUseTool
     ContinueTaskTool(),           # Correct
     MessageTool(),                # Correct
-    UpdateAgentTool(),            # Correct
     DataProvidersTool(),          # Correct
     ExpandMessageTool(),          # Already Corrected
     SandboxDocumentGenerationTool(),# Already Corrected
