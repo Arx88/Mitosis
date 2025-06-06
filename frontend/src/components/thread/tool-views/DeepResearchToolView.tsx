@@ -1,13 +1,21 @@
 import React from 'react';
 import { ToolViewProps } from './types';
 
-export const DeepResearchToolView: React.FC<ToolViewProps> = ({ toolCall }) => {
+export const DeepResearchToolView: React.FC<ToolViewProps> = ({
+  name,
+  agentStatus,
+  isSuccess,
+  assistantContent,
+  toolContent,
+}) => {
   return (
     <div>
       <h3>Deep Research Tool</h3>
-      <p>Tool call ID: {toolCall.id}</p>
-      <p>Status: {toolCall.status}</p>
-      {/* Add more detailed view based on toolCall.input and toolCall.output */}
+      <p>Tool Name/ID: {name || 'N/A'}</p>
+      <p>Status: {agentStatus || (isSuccess ? 'Completed' : 'Unknown')}</p>
+      {assistantContent && <p>Assistant Content: {assistantContent}</p>}
+      {toolContent && <p>Tool Content: {toolContent}</p>}
+      {/* Add more detailed view based on available props */}
     </div>
   );
 };
