@@ -93,14 +93,41 @@ class DeepResearchToolUpdated(Tool):
         self._sandbox = None
 
     async def _ensure_research_dir(self) -> None:
-        """Ensure the research directory exists."""
+        """Ensure the research directory exists using sandbox.process.execute."""
         sandbox = await self._ensure_sandbox()
         try:
-            if not await sandbox.fs.exists(self.research_dir):
-                await sandbox.fs.mkdir(self.research_dir)
+            # Check if directory exists: test -d /path/to/dir exits with 0 if it exists
+            # Need to use the async execute method if available, or adapt if sandbox.process.execute is synchronous.
+            # Assuming sandbox.process.execute is synchronous based on its definition in sandbox.py LocalDockerProcessWrapper
+            # If it were async, it would be `await sandbox.process.execute(...)`
+            # The LocalDockerProcessWrapper.execute is synchronous.
+
+            # For Daytona, process.execute returns an ExecResponse object.
+            # For LocalDocker, process.execute also returns an ExecResponse object.
+            # ExecResponse has attributes: exit_code, result (stdout), stderr.
+
+            check_command = f"test -d {self.research_dir}"
+            logger.info(f"Checking if research directory '{self.research_dir}' exists with command: {check_command}")
+            exec_response = sandbox.process.execute(check_command)
+
+            if exec_response.exit_code == 0:
+                logger.info(f"Research directory '{self.research_dir}' already exists.")
+            else:
+                logger.info(f"Research directory '{self.research_dir}' does not exist (exit_code: {exec_response.exit_code}, stderr: {exec_response.stderr}). Attempting to create it.")
+                mkdir_command = f"mkdir -p {self.research_dir}"
+                logger.info(f"Creating research directory with command: {mkdir_command}")
+                mkdir_response = sandbox.process.execute(mkdir_command)
+                if mkdir_response.exit_code == 0:
+                    logger.info(f"Successfully created research directory '{self.research_dir}'.")
+                else:
+                    error_msg = f"Failed to create research directory '{self.research_dir}'. Exit_code: {mkdir_response.exit_code}, Stderr: {mkdir_response.stderr}"
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
         except Exception as e:
-            logger.error(f"Error creating research directory: {str(e)}")
-            raise e
+            # Log the original error if it's not the one we raised
+            if not (isinstance(e, Exception) and e.args and "Failed to create research directory" in e.args[0]):
+                 logger.error(f"Error ensuring research directory '{self.research_dir}': {str(e)}", exc_info=True)
+            raise # Re-raise the exception
 
     async def _ensure_sandbox(self) -> Any:
         """Ensure we have a valid sandbox instance."""
@@ -212,7 +239,7 @@ class DeepResearchToolUpdated(Tool):
         except Exception as e:
             error_message = str(e)
             logger.error(f"Error performing deep research on '{parameters.topic}': {error_message}")
-            return [ToolResult.error(f"Error performing research: {error_message[:200]}")]
+            return [self.fail_response(f"Error performing research: {error_message[:200]}")]
 
     async def _generate_search_queries(self, topic: str, num_queries: int) -> List[str]:
         """Generate multiple search queries based on the main topic."""
