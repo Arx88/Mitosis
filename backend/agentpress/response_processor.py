@@ -12,6 +12,7 @@ import json
 import re
 import uuid
 import asyncio
+import inspect
 from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, AsyncGenerator, Tuple, Union, Callable, Literal
 from dataclasses import dataclass
@@ -1437,15 +1438,62 @@ class ResponseProcessor:
                     # Let's keep it simple: if it's a string, it will be passed as the first positional arg later if not ** unpacked.
                     pass # Arguments remain as string or dict
 
-            logger.debug(f"Executing {original_function_name} with processed arguments: {arguments}")
+            logger.debug(f"Attempting to execute {original_function_name} (resolved to {tool_fn.__name__ if hasattr(tool_fn, '__name__') else 'unknown method name'}) with instance {tool_instance.__class__.__name__ if tool_instance else 'None'}")
 
-            # Execute the tool function
-            # If arguments is a dict, unpack it. If it's a single string (and no pydantic model was used to wrap it),
-            # this will pass it as the first positional argument. This relies on the tool function's signature.
-            if isinstance(arguments, dict):
-                result = await tool_fn(**arguments)
-            else: # Assumes string or other non-dict type, passed as single argument
-                result = await tool_fn(arguments)
+            if tool_instance and hasattr(tool_instance, 'parameters_schema') and hasattr(tool_fn, '__name__') and tool_fn.__name__ == 'run':
+                # This specifically targets tools like DeepResearchToolUpdated which have a 'run' method
+                # and a 'parameters_schema' attribute holding the Pydantic model class.
+                # The 'run' method is expected to take a single argument named 'parameters'.
+
+                pydantic_model_class = tool_instance.parameters_schema
+                sig = inspect.signature(tool_fn)
+
+                if 'parameters' in sig.parameters and sig.parameters['parameters'].annotation == pydantic_model_class:
+                    logger.info(f"Executing {original_function_name} via Pydantic model instantiation for 'parameters' argument.")
+                    try:
+                        # Ensure arguments is a dict, even if it's empty from the LLM
+                        processed_args = arguments if isinstance(arguments, dict) else {}
+                        pydantic_params = pydantic_model_class(**processed_args)
+                        result = await tool_fn(parameters=pydantic_params)
+                    except TypeError as te: # Catches Pydantic validation errors (missing fields etc.)
+                        error_msg = f"Parameter validation failed for {original_function_name} using {pydantic_model_class.__name__}: {str(te)}. Arguments received: {processed_args}"
+                        logger.error(error_msg)
+                        result = ToolResult(success=False, output=error_msg)
+                    except Exception as e: # Catch other instantiation or execution errors
+                        error_msg = f"Error during Pydantic model use or execution for {original_function_name}: {str(e)}. Arguments: {processed_args}"
+                        logger.error(error_msg, exc_info=True)
+                        result = ToolResult(success=False, output=error_msg)
+                else:
+                    # Method is 'run' and has 'parameters_schema', but signature doesn't match expected Pydantic model
+                    logger.warning(f"Method 'run' for {original_function_name} does not have the expected Pydantic 'parameters' annotation. Attempting direct call.")
+                    try:
+                        result = await tool_fn(**arguments)
+                    except TypeError as te:
+                         # If direct call fails due to 'parameters' arg still, provide more specific error
+                        if 'parameters' in str(te) and 'required positional argument' in str(te):
+                            error_msg = f"{original_function_name} expects a 'parameters' object but received raw arguments. LLM/Parser might not be structuring arguments correctly for this tool. Arguments: {arguments}. Error: {str(te)}"
+                            logger.error(error_msg)
+                            result = ToolResult(success=False, output=error_msg)
+                        else:
+                            raise # Re-raise if it's a different TypeError
+            else:
+                # Fallback to existing execution style if not matching the specific Pydantic 'run' pattern
+                logger.info(f"Executing {original_function_name} using direct argument unpacking.")
+                try:
+                    result = await tool_fn(**arguments)
+                except TypeError as te:
+                    # Check if the TypeError is about 'parameters' argument for non-run methods or tools without parameters_schema
+                    if 'parameters' in str(te) and 'required positional argument' in str(te):
+                        error_msg = f"{original_function_name} seems to expect a 'parameters' object but isn't set up with 'parameters_schema' or a 'run' method pattern. Arguments: {arguments}. Error: {str(te)}"
+                        logger.error(error_msg)
+                        result = ToolResult(success=False, output=error_msg)
+                    else:
+                        # If it's a different TypeError (e.g. unexpected keyword argument for a simple function), let it propagate
+                        # or handle it as a general tool execution error.
+                        # For now, re-raising to see what other errors might occur.
+                        # Alternatively, return a generic ToolResult error.
+                        logger.error(f"TypeError executing {original_function_name} with args {arguments}: {str(te)}", exc_info=True)
+                        result = ToolResult(success=False, output=f"Execution error for {original_function_name}: {str(te)}")
 
 
             logger.info(f"Tool execution complete: {original_function_name} -> {result}")
