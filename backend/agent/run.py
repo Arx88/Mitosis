@@ -139,8 +139,8 @@ async def run_agent(
         if enabled_tools.get('sandbox_document_generation_tool', {}).get('enabled', False): # Note: Key might be 'sb_document_generation_tool' based on tools.ts
             thread_manager.add_tool(SandboxDocumentGenerationTool, project_id=project_id, thread_manager=thread_manager)
             logger.info("Registered SandboxDocumentGenerationTool for custom agent.")
-        logger.info(f"DEBUG: Value of enabled_tools.get('deep_research_tool_updated', {{}}): {enabled_tools.get('deep_research_tool_updated', {})}")
-        if enabled_tools.get('deep_research_tool_updated', {}).get('enabled', False): # Key changed here
+        logger.info(f"DEBUG: Value of enabled_tools.get('DeepResearchToolUpdated', {{}}): {enabled_tools.get('DeepResearchToolUpdated', {})}")
+        if enabled_tools.get('DeepResearchToolUpdated', {}).get('enabled', False): # Key changed back here
             thread_manager.add_tool(DeepResearchToolUpdated, project_id=project_id, thread_manager=thread_manager)
             logger.info("Registered DeepResearchToolUpdated for custom agent.")
         if config.RAPID_API_KEY and enabled_tools.get('data_providers_tool', {}).get('enabled', False):
