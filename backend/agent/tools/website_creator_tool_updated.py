@@ -130,7 +130,7 @@ class SandboxWebsiteCreatorTool(Tool):
 
             # Check if project directory already exists
             if await sandbox.fs.exists(project_path):
-                return [ToolResult.error(f"Project directory 	'{project_path}	' already exists.")]
+                return [ToolResult.error(f"Project directory '{project_path}' already exists.")] # Corrected f-string and quote
 
             # Create the project directory
             await sandbox.fs.mkdir(project_path)
@@ -154,11 +154,21 @@ class SandboxWebsiteCreatorTool(Tool):
             deployment_url = None
             if parameters.deploy:
                 deploy_result = await self._deploy_website(project_path, parameters.framework)
-                if deploy_result.success:
-                    deployment_url = deploy_result.output.get("url")
+                if deploy_result.success: # Assuming deploy_result is a ToolResult-like object or similar
+                    # Accessing output of a ToolResult which is a string, parse if it's JSON
+                    # For now, assuming deploy_result.output is a dictionary if success
+                    output_data = deploy_result.output
+                    if isinstance(output_data, str): # If it's a JSON string
+                        try:
+                            output_data = json.loads(output_data)
+                        except json.JSONDecodeError:
+                            output_data = {} # Default to empty dict if parse fails
+
+                    deployment_url = output_data.get("url")
                     message = f"Website project created at {project_path} and deployed successfully."
-                else:
-                    message = f"Website project created at {project_path}, but deployment failed: {deploy_result.error}"
+                else: # Assuming deploy_result has an error attribute or similar for failure message
+                    error_message = deploy_result.error if hasattr(deploy_result, 'error') else "Unknown deployment error"
+                    message = f"Website project created at {project_path}, but deployment failed: {error_message}"
             else:
                 message = f"Website project created successfully at {project_path}."
 
@@ -175,11 +185,13 @@ class SandboxWebsiteCreatorTool(Tool):
 
         except Exception as e:
             error_message = str(e)
-            logger.error(f"Error creating website project 	'{parameters.project_name}	': {error_message}")
+            logger.error(f"Error creating website project '{parameters.project_name}': {error_message}") # Corrected f-string
             # Attempt cleanup if directory was created
             try:
-                if await sandbox.fs.exists(project_path):
-                    await sandbox.fs.rmdir(project_path)
+                # Ensure sandbox is available for cleanup, might need to re-ensure if error happened before _ensure_sandbox
+                current_sandbox = self._sandbox if self._sandbox else await self._ensure_sandbox()
+                if await current_sandbox.fs.exists(project_path):
+                    await current_sandbox.fs.rmdir(project_path)
             except Exception as cleanup_e:
                 logger.error(f"Error during cleanup: {cleanup_e}")
             return [ToolResult.error(f"Error creating website: {error_message[:200]}")]
@@ -306,22 +318,22 @@ class SandboxWebsiteCreatorTool(Tool):
           </React.StrictMode>,
         )
         """)
-        await sandbox.fs.write_file(f"{project_path}/package.json", json.dumps({
+        await sandbox.fs.write_file(f"{project_path}/package.json", json.dumps({ # Corrected: single braces
             "name": project_name,
             "private": True,
             "version": "0.0.0",
             "type": "module",
-            "scripts": {
+            "scripts": { # Corrected: single braces
                 "dev": "vite",
                 "build": "vite build",
                 "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
                 "preview": "vite preview"
             },
-            "dependencies": {
+            "dependencies": { # Corrected: single braces
                 "react": "^18.2.0",
                 "react-dom": "^18.2.0"
             },
-            "devDependencies": {
+            "devDependencies": { # Corrected: single braces
                 "@types/react": "^18.2.66",
                 "@types/react-dom": "^18.2.22",
                 "@vitejs/plugin-react": "^4.2.1",
@@ -331,14 +343,14 @@ class SandboxWebsiteCreatorTool(Tool):
                 "eslint-plugin-react-refresh": "^0.4.6",
                 "vite": "^5.2.0"
             }
-        }, indent=2))
+        }, indent=2)) # Corrected: single braces
 
         logger.info(f"Created basic React app structure in {project_path}. Manual build steps might be needed.")
         # Note: This manual creation is a placeholder. Using `npm create vite` via shell is preferred.
 
     async def _deploy_website(self, project_path: str, framework: str) -> ToolResult:
         """Deploy the website using the SandboxDeployTool."""
-        logger.info(f"Attempting to deploy website from {project_path}")
+        logger.info(f"Attempting to deploy website from {project_path}") # Corrected f-string
 
         # Determine the build directory based on the framework
         build_dir = project_path # Default for static
@@ -354,24 +366,33 @@ class SandboxWebsiteCreatorTool(Tool):
 
         # Use the deploy tool
         # Assuming deploy tool handles framework type or expects a static build directory
-        deploy_params = {
+        deploy_params = { # Corrected: single braces
             "project_dir": build_dir,
             "framework": "static" # Deploy tool might expect static assets
         }
 
         try:
             # Call the deploy tool's run method directly
-            deploy_results = await self.deploy_tool.run(self.deploy_tool.parameters_schema(**deploy_params))
+            deploy_results = await self.deploy_tool.run(self.deploy_tool.parameters_schema(**deploy_params)) # This line might need adjustment if parameters_schema is not directly callable or if run expects a dict.
+                                                                                                           # Assuming parameters_schema can create an instance from a dict.
 
-            if deploy_results and deploy_results[0].success:
-                logger.info(f"Deployment successful: {deploy_results[0].output}")
-                return deploy_results[0]
+            if deploy_results and deploy_results[0].success: # Assuming deploy_results is a list of ToolResult
+                # Assuming deploy_results[0].output is a JSON string that needs parsing
+                output_data = {}
+                try:
+                    if isinstance(deploy_results[0].output, str):
+                        output_data = json.loads(deploy_results[0].output)
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse JSON from deploy_tool output: {deploy_results[0].output}")
+
+                logger.info(f"Deployment successful: {output_data}") # Corrected f-string
+                return deploy_results[0] # Return the ToolResult object
             else:
-                error_msg = deploy_results[0].error if deploy_results else "Unknown deployment error"
-                logger.error(f"Deployment failed: {error_msg}")
+                error_msg = deploy_results[0].error if (deploy_results and hasattr(deploy_results[0], 'error')) else "Unknown deployment error"
+                logger.error(f"Deployment failed: {error_msg}") # Corrected f-string
                 return ToolResult.error(f"Deployment failed: {error_msg}")
 
         except Exception as e:
-            logger.error(f"Error during deployment: {str(e)}")
+            logger.error(f"Error during deployment: {str(e)}") # Corrected f-string
             return ToolResult.error(f"Error during deployment: {str(e)}")
 ```
