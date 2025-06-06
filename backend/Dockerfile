@@ -18,7 +18,8 @@ RUN useradd -m -u 1000 appuser && \
 
 # Install Python dependencies
 COPY --chown=appuser:appuser requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+RUN pip install --no-cache-dir --timeout 600 numpy
+RUN pip install --no-cache-dir --timeout 600 -r requirements.txt gunicorn
 
 # Switch to non-root user
 USER appuser
