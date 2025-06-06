@@ -49,7 +49,7 @@ class SandboxWebsiteCreatorToolOutput:
     class Config:
         extra = "forbid"
 
-class SandboxWebsiteCreatorTool(Tool[SandboxWebsiteCreatorToolParameters, SandboxWebsiteCreatorToolOutput]):
+class SandboxWebsiteCreatorTool(Tool):
     """Tool for creating basic website structures within the sandbox environment."""
 
     name = "SandboxWebsiteCreatorTool"

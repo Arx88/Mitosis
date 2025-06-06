@@ -47,7 +47,7 @@ class SandboxDeepResearchToolOutput:
     class Config:
         extra = "forbid"
 
-class SandboxDeepResearchTool(Tool[SandboxDeepResearchToolParameters, SandboxDeepResearchToolOutput]):
+class SandboxDeepResearchTool(Tool):
     """Tool for performing deep research on topics by combining web search, content analysis, and information synthesis."""
 
     name = "SandboxDeepResearchTool"
