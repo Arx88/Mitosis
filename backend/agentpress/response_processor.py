@@ -1439,59 +1439,76 @@ class ResponseProcessor:
                     # Let's keep it simple: if it's a string, it will be passed as the first positional arg later if not ** unpacked.
                     pass # Arguments remain as string or dict
 
-            # START OF BLOCK TO REPLACE
-            logger.debug(f"Attempting to execute {original_function_name} (resolved to {tool_fn.__name__ if hasattr(tool_fn, '__name__') else 'unknown method name'}) with instance {tool_instance.__class__.__name__ if tool_instance else 'None'}")
-
+            logger.info(f"Attempting to determine Pydantic class for tool '{original_function_name}', method '{tool_fn.__name__}'.")
             pydantic_class_to_use = None
-            attempt_pydantic_call = False # Flag to indicate if Pydantic instantiation path should be taken
+            attempt_pydantic_call = False
 
-            # Conditions for attempting Pydantic model instantiation for a 'run' method
-            if tool_instance and \
-               hasattr(tool_fn, '__name__') and tool_fn.__name__ == 'run':
-
+            if tool_instance and hasattr(tool_fn, '__name__') and tool_fn.__name__ == 'run':
                 sig = inspect.signature(tool_fn)
                 if 'parameters' in sig.parameters:
-                    # Directly use the type annotation of the 'parameters' argument
-                    pydantic_annotation = sig.parameters['parameters'].annotation
+                    param_annotation = sig.parameters['parameters'].annotation
+                    logger.info(f"DEBUG_PARAMS: 'run' method's 'parameters' annotation: {param_annotation}, type: {type(param_annotation)}")
 
-                    logger.info(f"DEBUG_PARAMS: Annotation for 'parameters' argument: {pydantic_annotation}")
-                    logger.info(f"DEBUG_PARAMS: Type of annotation: {type(pydantic_annotation)}")
+                    # Scenario 1: Annotation is directly a Pydantic class
+                    if inspect.isclass(param_annotation) and hasattr(param_annotation, 'model_fields'):
+                        pydantic_class_to_use = param_annotation
+                        logger.info(f"DEBUG_PARAMS: Using annotation '{pydantic_class_to_use.__name__}' directly as Pydantic class.")
 
-                    if inspect.isclass(pydantic_annotation):
-                        # Check if it's a Pydantic model (basic check, can be improved if BaseModel is accessible)
-                        if hasattr(pydantic_annotation, 'model_fields'):
-                            pydantic_class_to_use = pydantic_annotation
-                            attempt_pydantic_call = True
-                            logger.info(f"DEBUG_PARAMS: Identified Pydantic class {pydantic_class_to_use.__name__} from 'run' method's 'parameters' type hint.")
+                    # Scenario 2: Annotation might be a decorator (wrapper function/method)
+                    elif callable(param_annotation):
+                        logger.info(f"DEBUG_PARAMS: Annotation is callable. Checking for __wrapped__ or if it's the 'parameters_schema' attribute itself.")
+                        # Check if the annotation itself has __wrapped__ (common for decorators)
+                        if hasattr(param_annotation, '__wrapped__') and inspect.isclass(param_annotation.__wrapped__) and hasattr(param_annotation.__wrapped__, 'model_fields'):
+                            pydantic_class_to_use = param_annotation.__wrapped__
+                            logger.info(f"DEBUG_PARAMS: Unwrapped Pydantic class '{pydantic_class_to_use.__name__}' from annotation's __wrapped__ attribute.")
+                        # As a fallback, check the tool_instance.parameters_schema (which might also be the decorator)
+                        elif hasattr(tool_instance, 'parameters_schema'):
+                            schema_attr = tool_instance.parameters_schema
+                            logger.info(f"DEBUG_PARAMS: Fallback check: tool_instance.parameters_schema is {schema_attr}, type: {type(schema_attr)}")
+                            if inspect.isclass(schema_attr) and hasattr(schema_attr, 'model_fields'):
+                                pydantic_class_to_use = schema_attr
+                                logger.info(f"DEBUG_PARAMS: Using tool_instance.parameters_schema '{pydantic_class_to_use.__name__}' directly as Pydantic class.")
+                            elif callable(schema_attr) and hasattr(schema_attr, '__wrapped__') and inspect.isclass(schema_attr.__wrapped__) and hasattr(schema_attr.__wrapped__, 'model_fields'):
+                                pydantic_class_to_use = schema_attr.__wrapped__
+                                logger.info(f"DEBUG_PARAMS: Unwrapped Pydantic class '{pydantic_class_to_use.__name__}' from tool_instance.parameters_schema.__wrapped__.")
+                            else:
+                                logger.warning(f"DEBUG_PARAMS: tool_instance.parameters_schema is not a direct Pydantic class or a recognized wrapped one.")
                         else:
-                            logger.warning(f"DEBUG_PARAMS: Annotation {pydantic_annotation} for 'parameters' is a class but not a Pydantic model (missing 'model_fields').")
+                            logger.warning(f"DEBUG_PARAMS: Annotation is callable but not recognized as a Pydantic class or wrapper, and no tool_instance.parameters_schema found.")
                     else:
-                        logger.warning(f"DEBUG_PARAMS: Annotation {pydantic_annotation} for 'parameters' is not a class. Type is {type(pydantic_annotation)}.")
+                        logger.warning(f"DEBUG_PARAMS: Annotation for 'parameters' is not a class or callable. Type: {type(param_annotation)}")
+
+                    if pydantic_class_to_use:
+                        attempt_pydantic_call = True
+                        logger.info(f"DEBUG_PARAMS: Will attempt Pydantic model instantiation for {pydantic_class_to_use.__name__}.")
+                    else:
+                        logger.warning(f"DEBUG_PARAMS: Could not determine Pydantic class for 'parameters' argument of '{original_function_name}'. Will attempt direct call.")
                 else:
                     logger.warning(f"Method 'run' for {original_function_name} does not have a 'parameters' argument. Will attempt direct call.")
 
             if attempt_pydantic_call and pydantic_class_to_use:
-                logger.info(f"Executing {original_function_name} via Pydantic model instantiation for 'parameters' argument using {pydantic_class_to_use.__name__}.")
+                logger.info(f"Executing '{original_function_name}' by instantiating Pydantic model '{pydantic_class_to_use.__name__}' for 'parameters' argument.")
                 try:
+                    # Ensure arguments is a dictionary for Pydantic validation
                     processed_args = arguments if isinstance(arguments, dict) else {}
+                    if not processed_args and arguments: # If arguments was not a dict but existed (e.g. string from legacy)
+                        logger.warning(f"Original arguments was not a dict ('{type(arguments)}'), using empty dict for Pydantic model. This might be incorrect if arguments were expected.")
+
                     pydantic_params = pydantic_class_to_use(**processed_args)
                     result = await tool_fn(parameters=pydantic_params)
-                except TypeError as te:
-                    error_msg = f"Parameter validation failed for {original_function_name} using {pydantic_class_to_use.__name__}: {str(te)}. Arguments received: {processed_args}"
-                    logger.error(error_msg, exc_info=True) # Full traceback for TypeError
-                    result = ToolResult(success=False, output=error_msg)
-                except Exception as e:
-                    error_msg = f"Error during Pydantic model use or execution for {original_function_name}: {str(e)}. Arguments: {processed_args}"
+                except Exception as e: # Catches Pydantic ValidationError and other instantiation errors
+                    error_msg = f"Pydantic model instantiation or execution failed for '{original_function_name}' using '{pydantic_class_to_use.__name__}': {str(e)}. Arguments received: {arguments}"
                     logger.error(error_msg, exc_info=True)
                     result = ToolResult(success=False, output=error_msg)
             else:
-                logger.info(f"Executing {original_function_name} using direct argument unpacking (Pydantic conditions not met, or class not resolved/annotation mismatch).")
+                logger.info(f"Executing '{original_function_name}' using direct argument unpacking (Pydantic conditions not met or class not resolved). Arguments: {arguments}")
                 try:
                     result = await tool_fn(**arguments)
                 except TypeError as te:
-                    if 'parameters' in str(te) and 'required positional argument' in str(te):
-                        error_msg = f"{original_function_name} expects a 'parameters' object but received raw arguments, and Pydantic auto-handling conditions were not met/failed. Arguments: {arguments}. Error: {str(te)}"
-                        logger.error(error_msg) # No exc_info for this specific, anticipated error.
+                    # Specific check for "missing 1 required positional argument: 'parameters'"
+                    if 'parameters' in str(te) and ('required positional argument' in str(te) or 'missing 1 required keyword-only argument' in str(te)):
+                        error_msg = f"Execution of '{original_function_name}' failed. It likely expects a 'parameters' Pydantic object, but direct unpacking was attempted or Pydantic instantiation failed. Arguments: {arguments}. Error: {str(te)}"
+                        logger.error(error_msg)
                         result = ToolResult(success=False, output=error_msg)
                     else: # Other TypeErrors
                         logger.error(f"TypeError executing {original_function_name} with args {arguments}: {str(te)}", exc_info=True)
