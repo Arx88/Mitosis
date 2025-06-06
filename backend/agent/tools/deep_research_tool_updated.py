@@ -50,7 +50,7 @@ class DeepResearchToolUpdatedOutput:
 class DeepResearchToolUpdated(Tool):
     """Tool for performing deep research on topics by combining web search, content analysis, and information synthesis."""
 
-    name = "DeepResearch"
+    name = "DeepSearchTool"
     description = (
         "A tool for performing deep research on topics by searching multiple sources, "
         "analyzing content, and synthesizing information into a comprehensive report."
@@ -117,14 +117,14 @@ class DeepResearchToolUpdated(Tool):
         return self._sandbox
 
     @xml_schema(
-        tag_name="deep-research",
+        tag_name="deep_search",
         # Parameters are passed as a Pydantic model 'parameters',
         # so explicit mapping for each field might not be needed here
         # if the framework handles Pydantic models automatically with openapi_schema.
         # The example will show how parameters are expected within the 'parameters' object.
         example='''
         <function_calls>
-          <invoke name="deep-research">
+          <invoke name="deep_search">
             <parameters>
               <topic>Future of renewable energy</topic>
               <depth>standard</depth>
