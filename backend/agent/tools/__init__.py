@@ -2,7 +2,7 @@ from agentpress.tool import Tool
 from .continue_task_tool import ContinueTaskTool
 from .data_providers_tool import DataProvidersTool
 from .document_generation_tool import SandboxDocumentGenerationTool
-from .expand_msg_tool import ExpandMsgTool
+from .expand_msg_tool import ExpandMessageTool
 from .message_tool import MessageTool
 from .sb_browser_tool import ComputerUseTool
 from .update_agent_tool import UpdateAgentTool
@@ -19,7 +19,7 @@ default_tools: list[Tool] = [
     MessageTool(),
     UpdateAgentTool(),
     DataProvidersTool(),
-    ExpandMsgTool(),
+    ExpandMessageTool(), # Corrected
     SandboxDocumentGenerationTool(), # Corrected
     # INICIO DE MODIFICACIÓN
     SandboxDeepResearchTool(),
