@@ -135,13 +135,11 @@ class DeepResearchToolUpdated(Tool):
         # The example will show how parameters are expected within the 'parameters' object.
         example='''
         <function_calls>
-          <invoke name="deep_search">
-            <parameters>
-              <topic>Future of renewable energy</topic>
-              <depth>standard</depth>
-              <sources>5</sources>
-              <format>markdown</format>
-            </parameters>
+          <invoke name="deep-search">
+            <parameter name="topic">Future of renewable energy</parameter>
+            <parameter name="depth">standard</parameter>
+            <parameter name="sources">5</parameter>
+            <parameter name="format">markdown</parameter>
           </invoke>
         </function_calls>
         '''
