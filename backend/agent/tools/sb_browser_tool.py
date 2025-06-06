@@ -1,5 +1,6 @@
 import traceback
 import json
+from typing import Optional # Ensure Optional is imported
 
 from agentpress.tool import ToolResult, openapi_schema, xml_schema # Direct import
 from agentpress.thread_manager import ThreadManager # Direct import
@@ -11,7 +12,9 @@ from utils.s3_upload_utils import upload_base64_image # Direct import
 class SandboxBrowserTool(SandboxToolsBase):
     """Tool for executing tasks in a Daytona sandbox with browser-use capabilities."""
     
-    def __init__(self, project_id: str, thread_id: str, thread_manager: ThreadManager):
+    # NOTE: project_id, thread_manager (and thread_id if applicable) are Optional to allow default instantiation.
+    def __init__(self, project_id: Optional[str] = None, thread_id: Optional[str] = None, thread_manager: Optional[ThreadManager] = None):
+        # super().__init__ can handle Optional project_id/thread_manager.
         super().__init__(project_id, thread_manager)
         self.thread_id = thread_id
 
