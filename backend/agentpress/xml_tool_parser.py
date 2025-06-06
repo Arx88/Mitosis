@@ -220,6 +220,8 @@ class XMLToolParser:
             # Convert tag name to function name (e.g., create-file -> create_file)
             function_name = tag_name.replace('-', '_')
             
+            logger.debug(f"Legacy parser: tag_name='{tag_name}', attributes_str='{attributes_str}', inner_content='{inner_content.strip()}'")
+            logger.debug(f"Legacy parser: extracted parameters='{parameters}' for function_name='{function_name}'")
             tool_calls.append(XMLToolCall(
                 function_name=function_name,
                 parameters=parameters,
