@@ -1324,6 +1324,7 @@ class ResponseProcessor:
     # Tool execution methods
     async def _execute_tool(self, tool_call: Dict[str, Any]) -> ToolResult:
         """Execute a single tool call and return the result."""
+        logger.debug(f"Executing tool with tool_call data: {tool_call}")
         # Ensure original_function_name is available for span naming even if tool_call is malformed
         original_function_name_for_span = tool_call.get("function_name", "unknown_tool")
         span = self.trace.span(name=f"execute_tool.{original_function_name_for_span}", input=tool_call.get("arguments"))
