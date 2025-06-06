@@ -1456,25 +1456,28 @@ class ResponseProcessor:
 
                     # Scenario 2: Annotation might be a decorator (wrapper function/method)
                     elif callable(param_annotation):
-                        logger.info(f"DEBUG_PARAMS: Annotation is callable. Checking for __wrapped__ or if it's the 'parameters_schema' attribute itself.")
-                        # Check if the annotation itself has __wrapped__ (common for decorators)
+                        logger.info(f"DEBUG_PARAMS: Annotation is callable. Logging its attributes: dir={dir(param_annotation)}") # Log dir()
+                        logger.info(f"DEBUG_PARAMS: Checking for __wrapped__ on annotation or if it's the 'parameters_schema' attribute itself.")
                         if hasattr(param_annotation, '__wrapped__') and inspect.isclass(param_annotation.__wrapped__) and hasattr(param_annotation.__wrapped__, 'model_fields'):
                             pydantic_class_to_use = param_annotation.__wrapped__
                             logger.info(f"DEBUG_PARAMS: Unwrapped Pydantic class '{pydantic_class_to_use.__name__}' from annotation's __wrapped__ attribute.")
-                        # As a fallback, check the tool_instance.parameters_schema (which might also be the decorator)
                         elif hasattr(tool_instance, 'parameters_schema'):
                             schema_attr = tool_instance.parameters_schema
                             logger.info(f"DEBUG_PARAMS: Fallback check: tool_instance.parameters_schema is {schema_attr}, type: {type(schema_attr)}")
-                            if inspect.isclass(schema_attr) and hasattr(schema_attr, 'model_fields'):
+                            if inspect.isclass(schema_attr) and hasattr(schema_attr, 'model_fields'): # Should ideally not be the decorator if different from param_annotation
                                 pydantic_class_to_use = schema_attr
                                 logger.info(f"DEBUG_PARAMS: Using tool_instance.parameters_schema '{pydantic_class_to_use.__name__}' directly as Pydantic class.")
-                            elif callable(schema_attr) and hasattr(schema_attr, '__wrapped__') and inspect.isclass(schema_attr.__wrapped__) and hasattr(schema_attr.__wrapped__, 'model_fields'):
-                                pydantic_class_to_use = schema_attr.__wrapped__
-                                logger.info(f"DEBUG_PARAMS: Unwrapped Pydantic class '{pydantic_class_to_use.__name__}' from tool_instance.parameters_schema.__wrapped__.")
+                            elif callable(schema_attr): # If schema_attr is also the decorator
+                                logger.info(f"DEBUG_PARAMS: tool_instance.parameters_schema is also callable. Logging its attributes: dir={dir(schema_attr)}") # Log dir()
+                                if hasattr(schema_attr, '__wrapped__') and inspect.isclass(schema_attr.__wrapped__) and hasattr(schema_attr.__wrapped__, 'model_fields'):
+                                    pydantic_class_to_use = schema_attr.__wrapped__
+                                    logger.info(f"DEBUG_PARAMS: Unwrapped Pydantic class '{pydantic_class_to_use.__name__}' from tool_instance.parameters_schema.__wrapped__.")
+                                else:
+                                    logger.warning(f"DEBUG_PARAMS: tool_instance.parameters_schema is callable but does not have a recognized __wrapped__ Pydantic class.")
                             else:
-                                logger.warning(f"DEBUG_PARAMS: tool_instance.parameters_schema is not a direct Pydantic class or a recognized wrapped one.")
+                                logger.warning(f"DEBUG_PARAMS: tool_instance.parameters_schema is not a direct Pydantic class or a recognized callable wrapper.")
                         else:
-                            logger.warning(f"DEBUG_PARAMS: Annotation is callable but not recognized as a Pydantic class or wrapper, and no tool_instance.parameters_schema found.")
+                            logger.warning(f"DEBUG_PARAMS: Annotation is callable but not a recognized Pydantic wrapper, and no tool_instance.parameters_schema found.")
                     else:
                         logger.warning(f"DEBUG_PARAMS: Annotation for 'parameters' is not a class or callable. Type: {type(param_annotation)}")
 
