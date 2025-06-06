@@ -7,6 +7,7 @@ from datetime import datetime
 
 from agentpress.tool import Tool, ToolResult, openapi_schema, xml_schema
 from agentpress.thread_manager import ThreadManager
+from pydantic import BaseModel # Add this import if not present
 
 # Import necessary tools that we'll use
 from agent.tools.web_search_tool import SandboxWebSearchTool
@@ -15,8 +16,18 @@ from agent.tools.document_generation_tool import SandboxDocumentGenerationTool
 
 logger = logging.getLogger(__name__)
 
-@openapi_schema
-class DeepResearchToolUpdatedParameters:
+# Undecorated Pydantic class for internal use
+class ActualDeepResearchToolParameters(BaseModel):
+    topic: str
+    depth: str = "standard"
+    sources: int = 5
+    format: str = "markdown"
+    class Config:
+        extra = "forbid"
+
+# Old class, renamed and decorator removed, kept for reference or other uses if any
+# @openapi_schema # Decorator removed
+class _Decorated_DeepResearchToolUpdatedParameters:
     """
     Parameters for the DeepResearchToolUpdated.
     """
@@ -55,7 +66,7 @@ class DeepResearchToolUpdated(Tool):
         "A tool for performing deep research on topics by searching multiple sources, "
         "analyzing content, and synthesizing information into a comprehensive report."
     )
-    parameters_schema = DeepResearchToolUpdatedParameters
+    parameters_schema = ActualDeepResearchToolParameters
     output_schema = DeepResearchToolUpdatedOutput
 
     # NOTE: project_id, thread_manager (and thread_id if applicable) are Optional to allow default instantiation.
@@ -135,7 +146,7 @@ class DeepResearchToolUpdated(Tool):
         </function_calls>
         '''
     )
-    async def run(self, parameters: DeepResearchToolUpdatedParameters) -> List[ToolResult]:
+    async def run(self, parameters: ActualDeepResearchToolParameters) -> List[ToolResult]:
         """
         Perform deep research on a topic by searching multiple sources, analyzing content, and synthesizing information.
 
