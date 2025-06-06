@@ -117,7 +117,7 @@ class DeepResearchToolUpdated(Tool):
         return self._sandbox
 
     @xml_schema(
-        tag_name="deep_search",
+        tag_name="deep-search",
         # Parameters are passed as a Pydantic model 'parameters',
         # so explicit mapping for each field might not be needed here
         # if the framework handles Pydantic models automatically with openapi_schema.
