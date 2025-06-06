@@ -1447,37 +1447,26 @@ class ResponseProcessor:
 
             # Conditions for attempting Pydantic model instantiation for a 'run' method
             if tool_instance and \
-               hasattr(tool_instance, 'parameters_schema') and \
                hasattr(tool_fn, '__name__') and tool_fn.__name__ == 'run':
 
                 sig = inspect.signature(tool_fn)
                 if 'parameters' in sig.parameters:
-                    pydantic_schema_candidate = tool_instance.parameters_schema
+                    # Directly use the type annotation of the 'parameters' argument
+                    pydantic_annotation = sig.parameters['parameters'].annotation
 
-                    logger.info(f"DEBUG_PARAMS: Value of tool_instance.parameters_schema: {pydantic_schema_candidate}")
-                    logger.info(f"DEBUG_PARAMS: Type of tool_instance.parameters_schema: {type(pydantic_schema_candidate)}")
+                    logger.info(f"DEBUG_PARAMS: Annotation for 'parameters' argument: {pydantic_annotation}")
+                    logger.info(f"DEBUG_PARAMS: Type of annotation: {type(pydantic_annotation)}")
 
-                    if callable(pydantic_schema_candidate) and \
-                       hasattr(pydantic_schema_candidate, '__wrapped__') and \
-                       inspect.isclass(pydantic_schema_candidate.__wrapped__):
-
-                        pydantic_class_to_use = pydantic_schema_candidate.__wrapped__
-                        logger.info(f"DEBUG_PARAMS: Using __wrapped__ attribute to get Pydantic class: {pydantic_class_to_use}")
-
-                    elif inspect.isclass(pydantic_schema_candidate):
-                        pydantic_class_to_use = pydantic_schema_candidate
-                        logger.info(f"DEBUG_PARAMS: Using parameters_schema directly as Pydantic class: {pydantic_class_to_use}")
-
-                    else:
-                        logger.warning(f"DEBUG_PARAMS: parameters_schema (value: {pydantic_schema_candidate}, type: {type(pydantic_schema_candidate)}) is not a class and not a recognized wrapped class. Cannot use for Pydantic instantiation.")
-
-                    if pydantic_class_to_use:
-                        # Sanity check: Ensure the 'parameters' argument of 'run' method is annotated with this Pydantic class
-                        if sig.parameters['parameters'].annotation == pydantic_class_to_use:
+                    if inspect.isclass(pydantic_annotation):
+                        # Check if it's a Pydantic model (basic check, can be improved if BaseModel is accessible)
+                        if hasattr(pydantic_annotation, 'model_fields'):
+                            pydantic_class_to_use = pydantic_annotation
                             attempt_pydantic_call = True
-                            logger.info(f"DEBUG_PARAMS: Annotation matched. Will use Pydantic model instantiation for {pydantic_class_to_use.__name__}.")
+                            logger.info(f"DEBUG_PARAMS: Identified Pydantic class {pydantic_class_to_use.__name__} from 'run' method's 'parameters' type hint.")
                         else:
-                            logger.warning(f"DEBUG_PARAMS: Annotation mismatch for 'parameters' argument of {original_function_name}. Expected {pydantic_class_to_use}, found {sig.parameters['parameters'].annotation}. Will attempt direct call.")
+                            logger.warning(f"DEBUG_PARAMS: Annotation {pydantic_annotation} for 'parameters' is a class but not a Pydantic model (missing 'model_fields').")
+                    else:
+                        logger.warning(f"DEBUG_PARAMS: Annotation {pydantic_annotation} for 'parameters' is not a class. Type is {type(pydantic_annotation)}.")
                 else:
                     logger.warning(f"Method 'run' for {original_function_name} does not have a 'parameters' argument. Will attempt direct call.")
 
