@@ -5,11 +5,7 @@ import asyncio
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 
-from agent_protocol import Tool, ToolResult
-from agent_protocol.models import (
-    openapi_schema,
-    xml_schema,
-)
+from agentpress.tool import Tool, ToolResult, openapi_schema, xml_schema
 from sandbox.tool_base import SandboxToolsBase
 from agentpress.thread_manager import ThreadManager
 
