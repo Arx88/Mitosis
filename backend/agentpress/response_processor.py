@@ -1438,59 +1438,79 @@ class ResponseProcessor:
                     # Let's keep it simple: if it's a string, it will be passed as the first positional arg later if not ** unpacked.
                     pass # Arguments remain as string or dict
 
+            # START OF BLOCK TO REPLACE
             logger.debug(f"Attempting to execute {original_function_name} (resolved to {tool_fn.__name__ if hasattr(tool_fn, '__name__') else 'unknown method name'}) with instance {tool_instance.__class__.__name__ if tool_instance else 'None'}")
 
-            # Check conditions for Pydantic model instantiation for a 'run' method
-            is_pydantic_run_method = False
-            if tool_instance and                hasattr(tool_instance, 'parameters_schema') and                hasattr(tool_fn, '__name__') and tool_fn.__name__ == 'run':
+            pydantic_class_to_use = None
+            attempt_pydantic_call = False # Flag to indicate if Pydantic instantiation path should be taken
+
+            # Conditions for attempting Pydantic model instantiation for a 'run' method
+            if tool_instance and \
+               hasattr(tool_instance, 'parameters_schema') and \
+               hasattr(tool_fn, '__name__') and tool_fn.__name__ == 'run':
 
                 sig = inspect.signature(tool_fn)
                 if 'parameters' in sig.parameters:
-                    # Further check if parameters_schema is actually a class (Pydantic model)
-                    logger.info(f"DEBUG_PARAMS: Value of tool_instance.parameters_schema: {tool_instance.parameters_schema}")
-                    logger.info(f"DEBUG_PARAMS: Type of tool_instance.parameters_schema: {type(tool_instance.parameters_schema)}")
-                    if inspect.isclass(tool_instance.parameters_schema):
-                        is_pydantic_run_method = True
-                    else:
-                        logger.warning(f"'parameters_schema' for {original_function_name} is not a class. Proceeding with direct call.")
-                else:
-                    logger.warning(f"Method 'run' for {original_function_name} does not have a 'parameters' argument. Attempting direct call.")
+                    pydantic_schema_candidate = tool_instance.parameters_schema
 
-            if is_pydantic_run_method:
-                pydantic_model_class = tool_instance.parameters_schema
-                logger.info(f"Executing {original_function_name} via Pydantic model instantiation for 'parameters' argument using {pydantic_model_class.__name__}.")
+                    logger.info(f"DEBUG_PARAMS: Value of tool_instance.parameters_schema: {pydantic_schema_candidate}")
+                    logger.info(f"DEBUG_PARAMS: Type of tool_instance.parameters_schema: {type(pydantic_schema_candidate)}")
+
+                    if callable(pydantic_schema_candidate) and \
+                       hasattr(pydantic_schema_candidate, '__wrapped__') and \
+                       inspect.isclass(pydantic_schema_candidate.__wrapped__):
+
+                        pydantic_class_to_use = pydantic_schema_candidate.__wrapped__
+                        logger.info(f"DEBUG_PARAMS: Using __wrapped__ attribute to get Pydantic class: {pydantic_class_to_use}")
+
+                    elif inspect.isclass(pydantic_schema_candidate):
+                        pydantic_class_to_use = pydantic_schema_candidate
+                        logger.info(f"DEBUG_PARAMS: Using parameters_schema directly as Pydantic class: {pydantic_class_to_use}")
+
+                    else:
+                        logger.warning(f"DEBUG_PARAMS: parameters_schema (value: {pydantic_schema_candidate}, type: {type(pydantic_schema_candidate)}) is not a class and not a recognized wrapped class. Cannot use for Pydantic instantiation.")
+
+                    if pydantic_class_to_use:
+                        # Sanity check: Ensure the 'parameters' argument of 'run' method is annotated with this Pydantic class
+                        if sig.parameters['parameters'].annotation == pydantic_class_to_use:
+                            attempt_pydantic_call = True
+                            logger.info(f"DEBUG_PARAMS: Annotation matched. Will use Pydantic model instantiation for {pydantic_class_to_use.__name__}.")
+                        else:
+                            logger.warning(f"DEBUG_PARAMS: Annotation mismatch for 'parameters' argument of {original_function_name}. Expected {pydantic_class_to_use}, found {sig.parameters['parameters'].annotation}. Will attempt direct call.")
+                else:
+                    logger.warning(f"Method 'run' for {original_function_name} does not have a 'parameters' argument. Will attempt direct call.")
+
+            if attempt_pydantic_call and pydantic_class_to_use:
+                logger.info(f"Executing {original_function_name} via Pydantic model instantiation for 'parameters' argument using {pydantic_class_to_use.__name__}.")
                 try:
                     processed_args = arguments if isinstance(arguments, dict) else {}
-                    pydantic_params = pydantic_model_class(**processed_args)
+                    pydantic_params = pydantic_class_to_use(**processed_args)
                     result = await tool_fn(parameters=pydantic_params)
                 except TypeError as te:
-                    # This will catch Pydantic's __init__ errors if required fields are missing from processed_args
-                    # or if types are wrong.
-                    error_msg = f"Parameter validation failed for {original_function_name} using {pydantic_model_class.__name__}: {str(te)}. Arguments received: {processed_args}"
-                    logger.error(error_msg)
+                    error_msg = f"Parameter validation failed for {original_function_name} using {pydantic_class_to_use.__name__}: {str(te)}. Arguments received: {processed_args}"
+                    logger.error(error_msg, exc_info=True) # Full traceback for TypeError
                     result = ToolResult(success=False, output=error_msg)
                 except Exception as e:
                     error_msg = f"Error during Pydantic model use or execution for {original_function_name}: {str(e)}. Arguments: {processed_args}"
                     logger.error(error_msg, exc_info=True)
                     result = ToolResult(success=False, output=error_msg)
             else:
-                # Fallback to existing execution style if not matching the specific Pydantic 'run' pattern
-                # or if previous checks determined it's not a Pydantic run method.
-                logger.info(f"Executing {original_function_name} using direct argument unpacking (not a Pydantic 'run' method or check failed).")
+                logger.info(f"Executing {original_function_name} using direct argument unpacking (Pydantic conditions not met, or class not resolved/annotation mismatch).")
                 try:
                     result = await tool_fn(**arguments)
                 except TypeError as te:
                     if 'parameters' in str(te) and 'required positional argument' in str(te):
-                        error_msg = f"{original_function_name} expects a 'parameters' object but received raw arguments, and Pydantic auto-handling conditions were not met. Arguments: {arguments}. Error: {str(te)}"
-                        logger.error(error_msg)
+                        error_msg = f"{original_function_name} expects a 'parameters' object but received raw arguments, and Pydantic auto-handling conditions were not met/failed. Arguments: {arguments}. Error: {str(te)}"
+                        logger.error(error_msg) # No exc_info for this specific, anticipated error.
                         result = ToolResult(success=False, output=error_msg)
-                    else:
+                    else: # Other TypeErrors
                         logger.error(f"TypeError executing {original_function_name} with args {arguments}: {str(te)}", exc_info=True)
                         result = ToolResult(success=False, output=f"Execution error for {original_function_name}: {str(te)}")
-                except Exception as e: # Catch any other general error during direct execution
+                except Exception as e:
                     error_msg = f"Generic error executing {original_function_name} directly: {str(e)}. Arguments: {arguments}"
                     logger.error(error_msg, exc_info=True)
                     result = ToolResult(success=False, output=error_msg)
+            # END OF BLOCK TO REPLACE
 
             logger.info(f"Tool execution complete: {original_function_name} -> {result}")
             serializable_result_output = str(result.output) if hasattr(result, 'output') else str(result)
