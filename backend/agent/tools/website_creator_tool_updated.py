@@ -306,22 +306,22 @@ class SandboxWebsiteCreatorTool(Tool):
           </React.StrictMode>,
         )
         """)
-        await sandbox.fs.write_file(f"{project_path}/package.json", json.dumps({{
+        await sandbox.fs.write_file(f"{project_path}/package.json", json.dumps({
             "name": project_name,
             "private": True,
             "version": "0.0.0",
             "type": "module",
-            "scripts": {{
+            "scripts": {
                 "dev": "vite",
                 "build": "vite build",
                 "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
                 "preview": "vite preview"
-            }},
-            "dependencies": {{
+            },
+            "dependencies": {
                 "react": "^18.2.0",
                 "react-dom": "^18.2.0"
-            }},
-            "devDependencies": {{
+            },
+            "devDependencies": {
                 "@types/react": "^18.2.66",
                 "@types/react-dom": "^18.2.22",
                 "@vitejs/plugin-react": "^4.2.1",
@@ -330,8 +330,8 @@ class SandboxWebsiteCreatorTool(Tool):
                 "eslint-plugin-react-hooks": "^4.6.0",
                 "eslint-plugin-react-refresh": "^0.4.6",
                 "vite": "^5.2.0"
-            }}
-        }}, indent=2))
+            }
+        }, indent=2))
 
         logger.info(f"Created basic React app structure in {project_path}. Manual build steps might be needed.")
         # Note: This manual creation is a placeholder. Using `npm create vite` via shell is preferred.
@@ -354,24 +354,24 @@ class SandboxWebsiteCreatorTool(Tool):
 
         # Use the deploy tool
         # Assuming deploy tool handles framework type or expects a static build directory
-        deploy_params = {{
+        deploy_params = {
             "project_dir": build_dir,
             "framework": "static" # Deploy tool might expect static assets
-        }}
+        }
 
         try:
             # Call the deploy tool's run method directly
             deploy_results = await self.deploy_tool.run(self.deploy_tool.parameters_schema(**deploy_params))
 
             if deploy_results and deploy_results[0].success:
-                logger.info(f"Deployment successful: {{deploy_results[0].output}}")
+                logger.info(f"Deployment successful: {deploy_results[0].output}")
                 return deploy_results[0]
             else:
                 error_msg = deploy_results[0].error if deploy_results else "Unknown deployment error"
-                logger.error(f"Deployment failed: {{error_msg}}")
-                return ToolResult.error(f"Deployment failed: {{error_msg}}")
+                logger.error(f"Deployment failed: {error_msg}")
+                return ToolResult.error(f"Deployment failed: {error_msg}")
 
         except Exception as e:
-            logger.error(f"Error during deployment: {{str(e)}}")
-            return ToolResult.error(f"Error during deployment: {{str(e)}}")
+            logger.error(f"Error during deployment: {str(e)}")
+            return ToolResult.error(f"Error during deployment: {str(e)}")
 ```
