@@ -1447,6 +1447,8 @@ class ResponseProcessor:
                 sig = inspect.signature(tool_fn)
                 if 'parameters' in sig.parameters:
                     # Further check if parameters_schema is actually a class (Pydantic model)
+                    logger.info(f"DEBUG_PARAMS: Value of tool_instance.parameters_schema: {tool_instance.parameters_schema}")
+                    logger.info(f"DEBUG_PARAMS: Type of tool_instance.parameters_schema: {type(tool_instance.parameters_schema)}")
                     if inspect.isclass(tool_instance.parameters_schema):
                         is_pydantic_run_method = True
                     else:
