@@ -5,7 +5,7 @@ import asyncio
 from typing import Dict, List, Any, Optional, Union # Ensure Optional is imported
 from datetime import datetime
 
-from agentpress.tool import Tool, ToolResult, openapi_schema # xml_schema removed
+from agentpress.tool import Tool, ToolResult, openapi_schema, xml_schema
 from agentpress.thread_manager import ThreadManager
 
 # Import necessary tools that we'll use
@@ -50,7 +50,7 @@ class SandboxDeepResearchToolOutput:
 class SandboxDeepResearchTool(Tool):
     """Tool for performing deep research on topics by combining web search, content analysis, and information synthesis."""
 
-    name = "SandboxDeepResearchTool"
+    name = "DeepSearchTool"
     description = (
         "A tool for performing deep research on topics by searching multiple sources, "
         "analyzing content, and synthesizing information into a comprehensive report."
@@ -116,6 +116,25 @@ class SandboxDeepResearchTool(Tool):
 
         return self._sandbox
 
+    @xml_schema(
+        tag_name="deep_search",
+        # Parameters are passed as a Pydantic model 'parameters',
+        # so explicit mapping for each field might not be needed here
+        # if the framework handles Pydantic models automatically with openapi_schema.
+        # The example will show how parameters are expected within the 'parameters' object.
+        example='''
+        <function_calls>
+          <invoke name="deep_search">
+            <parameters>
+              <topic>Future of renewable energy</topic>
+              <depth>standard</depth>
+              <sources>5</sources>
+              <format>markdown</format>
+            </parameters>
+          </invoke>
+        </function_calls>
+        '''
+    )
     async def run(self, parameters: SandboxDeepResearchToolParameters) -> List[ToolResult]:
         """
         Perform deep research on a topic by searching multiple sources, analyzing content, and synthesizing information.
