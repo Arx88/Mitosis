@@ -16,7 +16,6 @@ default_tools: list[Tool] = [
     ContinueTaskTool(),           # Correct
     MessageTool(),                # Correct
     DataProvidersTool(),          # Correct
-    ExpandMessageTool(),          # Already Corrected
     SandboxDocumentGenerationTool(),# Already Corrected
     SandboxDeepResearchTool(),    # New
     SandboxWebsiteCreatorTool(),  # New
