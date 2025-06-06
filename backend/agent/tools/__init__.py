@@ -7,7 +7,7 @@ from .message_tool import MessageTool
 from .sb_browser_tool import SandboxBrowserTool # Was ComputerUseTool
 from .update_agent_tool import UpdateAgentTool
 from .web_search_tool import SandboxWebSearchTool # Was WebSearchTool
-from .deep_research_tool_updated import SandboxDeepResearchTool # New
+from .deep_research_tool_updated import DeepResearchToolUpdated # New
 from .website_creator_tool_updated import SandboxWebsiteCreatorTool # New
 
 default_tools: list[Tool] = [
@@ -17,7 +17,7 @@ default_tools: list[Tool] = [
     MessageTool(),                # Correct
     DataProvidersTool(),          # Correct
     SandboxDocumentGenerationTool(),# Already Corrected
-    SandboxDeepResearchTool(),    # New
+    DeepResearchToolUpdated(),    # New
     SandboxWebsiteCreatorTool(),  # New
 ]
 

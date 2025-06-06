@@ -17,6 +17,7 @@ export const DEFAULT_AGENTPRESS_TOOLS: Record<string, { enabled: boolean; descri
     'deep_researcher': { enabled: false, description: 'Performs deep research on a topic and generates a report.', icon: '📚', color: 'bg-teal-100 dark:bg-teal-800/50' },
     'website_creator': { enabled: false, description: 'Creates and deploys a complete website from a description.', icon: '🛠️', color: 'bg-sky-100 dark:bg-sky-800/50' },
     // FIN DE MODIFICACIÓN
+    'DeepResearchToolUpdated': { enabled: false, description: 'Realiza una investigación profunda y exhaustiva sobre un tema.', icon: '📚', color: 'bg-lime-100 dark:bg-lime-800/50' },
 };
 
 export const getToolDisplayName = (toolName: string): string => {
@@ -34,6 +35,7 @@ export const getToolDisplayName = (toolName: string): string => {
       'deep_researcher': 'Deep Research',
       'website_creator': 'Website Creator',
       // FIN DE MODIFICACIÓN
+      'DeepResearchToolUpdated': 'Deep Research',
     };
     
     return displayNames[toolName] || toolName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
