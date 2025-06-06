@@ -4,7 +4,7 @@ import json
 import logging
 import tempfile
 import asyncio
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union # Ensure Optional is imported
 from datetime import datetime
 
 from sandbox.tool_base import SandboxToolsBase
@@ -15,14 +15,16 @@ import json
 import logging
 import tempfile
 import asyncio # Keep for subprocess if sandbox.run_command is not sufficient for all cases or for internal async ops
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union # Ensure Optional is imported
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 class SandboxDocumentGenerationTool(SandboxToolsBase):
 
-    def __init__(self, project_id: str, thread_manager: ThreadManager):
+    # NOTE: project_id, thread_manager (and thread_id if applicable) are Optional to allow default instantiation.
+    def __init__(self, project_id: Optional[str] = None, thread_manager: Optional[ThreadManager] = None):
+        # super().__init__ can handle Optional project_id/thread_manager.
         super().__init__(project_id, thread_manager)
         # self.workspace_path should be inherited from SandboxToolsBase
         # Ensure workspace_path is available from SandboxToolsBase, otherwise this will fail

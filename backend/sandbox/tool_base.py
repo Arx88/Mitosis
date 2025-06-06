@@ -16,7 +16,7 @@ class SandboxToolsBase(Tool):
     # Class variable to track if sandbox URLs have been printed
     _urls_printed = False
     
-    def __init__(self, project_id: str, thread_manager: Optional[ThreadManager] = None):
+    def __init__(self, project_id: Optional[str] = None, thread_manager: Optional[ThreadManager] = None):
         super().__init__()
         self.project_id = project_id
         self.thread_manager = thread_manager

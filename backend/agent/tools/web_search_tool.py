@@ -5,6 +5,7 @@ from agentpress.tool import Tool, ToolResult, openapi_schema, xml_schema
 from utils.config import config
 from sandbox.tool_base import SandboxToolsBase
 from agentpress.thread_manager import ThreadManager
+from typing import Optional # Added Optional
 import json
 import os
 import datetime
@@ -16,7 +17,7 @@ import logging
 class SandboxWebSearchTool(SandboxToolsBase):
     """Tool for performing web searches using Tavily API and web scraping using Firecrawl."""
 
-    def __init__(self, project_id: str, thread_manager: ThreadManager):
+    def __init__(self, project_id: Optional[str] = None, thread_manager: Optional[ThreadManager] = None):
         super().__init__(project_id, thread_manager)
         # Load environment variables
         load_dotenv()

@@ -2,7 +2,7 @@ import os
 import json
 import logging
 import asyncio
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union # Ensure Optional is imported
 from datetime import datetime
 
 from agentpress.tool import Tool, ToolResult, openapi_schema
@@ -52,10 +52,11 @@ class SandboxWebsiteCreatorTool(Tool):
     parameters_schema = SandboxWebsiteCreatorToolParameters
     output_schema = SandboxWebsiteCreatorToolOutput
 
+    # NOTE: project_id, thread_manager (and thread_id if applicable) are Optional to allow default instantiation.
     def __init__(
         self,
-        project_id: str,
-        thread_manager: ThreadManager,
+        project_id: Optional[str] = None,
+        thread_manager: Optional[ThreadManager] = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
