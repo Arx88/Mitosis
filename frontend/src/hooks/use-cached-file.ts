@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // Added useCallback
 import { useAuth } from '@/components/AuthProvider';
 
 // Global cache to persist between component mounts
