@@ -1,10 +1,5 @@
 import React from 'react';
 import { Markdown } from '@/components/ui/markdown'; // Reutilizamos el componente de Markdown
-import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-} from '../ui/collapsible';
 
 interface ReasoningViewProps {
   content: string;
@@ -16,13 +11,12 @@ export const ReasoningView: React.FC<ReasoningViewProps> = ({ content }) => {
   }
 
   return (
-    <Collapsible>
-      <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-lg">
-        <CollapsibleTrigger>Pensamiento del Agente</CollapsibleTrigger>
-        <CollapsibleContent>
-          <Markdown>{content}</Markdown>
-        </CollapsibleContent>
+    <div className="reasoning-view-container bg-slate-100 dark:bg-slate-800 p-4 rounded-lg">
+      <div className="flex items-center mb-2">
+        <span className="mr-2 thinking-icon">⚙️</span>
+        <span className="font-semibold">Pensamiento del Agente</span>
       </div>
-    </Collapsible>
+      <Markdown>{content}</Markdown>
+    </div>
   );
 };
