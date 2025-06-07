@@ -19,6 +19,14 @@ import { ReasoningView } from '@/components/thread/ReasoningView';
 import { parseXmlToolCalls, isNewXmlFormat, extractToolNameFromStream } from '@/components/thread/tool-views/xml-parser';
 import { parseToolResult } from '@/components/thread/tool-views/tool-result-parser';
 
+// Helper function to extract content from the first <think> tag
+const extractFirstThinkContent = (rawContent: string | null | undefined): string | null => {
+  if (!rawContent) return null;
+  // Regex to capture content within <think>...</think> tags, including newlines
+  const match = rawContent.match(/<think>((?:.|\n)*?)<\/think>/i);
+  return match ? match[1] : null;
+};
+
 // Define the set of tags whose raw XML should be hidden during streaming
 const HIDE_STREAMING_XML_TAGS = new Set([
     'execute-command',
@@ -79,7 +87,8 @@ export function renderMarkdownContent(
     fileViewerHandler?: (filePath?: string, filePathList?: string[]) => void,
     sandboxId?: string,
     project?: Project,
-    debugMode?: boolean
+    debugMode?: boolean,
+    ignoreThinkTags?: boolean // New parameter
 ) {
     // If in debug mode, just display raw content in a pre tag
     if (debugMode) {
@@ -187,16 +196,23 @@ export function renderMarkdownContent(
 
         const rawXml = match[0];
         const toolName = match[1] || match[2];
-        const toolCallKey = `tool-${match.index}`; // Keep for existing logic, or adapt key for ReasoningView
+        const toolCallKey = `tool-${match.index}`;
 
         if (toolName === 'think') {
-            const thinkContentMatch = rawXml.match(/<think>((?:.|\n)*?)<\/think>/i);
-            const extractedThinkContent = thinkContentMatch ? thinkContentMatch[1] : '';
-            contentParts.push(
-                <ReasoningView key={`reasoning-${match.index}`} content={extractedThinkContent} />
-            );
-            lastIndex = xmlRegex.lastIndex;
-            continue; // Skip other tool processing for <think>
+            if (ignoreThinkTags) {
+                // If ignoreThinkTags is true, strip the <think> tag and its content
+                lastIndex = xmlRegex.lastIndex;
+                continue;
+            } else {
+                // Default behavior: render ReasoningView
+                const thinkContentMatch = rawXml.match(/<think>((?:.|\n)*?)<\/think>/i);
+                const extractedThinkContent = thinkContentMatch ? thinkContentMatch[1] : '';
+                contentParts.push(
+                    <ReasoningView key={`reasoning-${match.index}`} content={extractedThinkContent} />
+                );
+                lastIndex = xmlRegex.lastIndex;
+                continue;
+            }
         }
 
         if (toolName === 'ask') {
@@ -293,7 +309,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
     agentName = 'Suna',
     agentAvatar = <KortixLogo size={16} />,
     emptyStateComponent,
-    reasoning,
+    reasoning, // This is props.reasoning from the dedicated stream
 }) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -536,6 +552,54 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                         </div>
                                                         <p className='ml-2 text-sm text-muted-foreground'>{agentName ? agentName : 'Suna'}</p>
                                                     </div>
+
+                                                    {/*
+                                                      Render ReasoningView for the last assistant message group.
+                                                      This is displayed if:
+                                                      1. `props.reasoning` (from the dedicated 'reasoning' stream) has content.
+                                                      2. OR the `agentStatus` is 'running' or 'connecting', in which case
+                                                         ReasoningView will show its "Thinking..." placeholder if `props.reasoning` is still empty.
+                                                      This provides an early visual cue that the agent is working.
+                                                      For the best UX, the backend should send `type: 'reasoning'` messages early in the process,
+                                                      or include <think> tags promptly in the main assistant content stream.
+                                                      Note: This ReasoningView is rendered based on props passed to ThreadContent.
+                                                      The `renderMarkdownContent` function when called for assistant speech
+                                                      will now have `ignoreThinkTags: true`.
+                                                    */}
+                                                    {(() => {
+                                                        const isLastGroup = groupIndex === groupedMessages.length - 1;
+                                                        if (!isLastGroup) return null;
+
+                                                        // Determine the source of content for think tag extraction.
+                                                        // Prioritize streaming content if it's the last group and streaming is active.
+                                                        let contentForThinkExtraction: string | null = null;
+                                                        if (isLastGroup && streamingTextContent && (streamHookStatus === 'streaming' || streamHookStatus === 'connecting')) {
+                                                            contentForThinkExtraction = streamingTextContent;
+                                                        } else if (group.messages.length > 0) {
+                                                            // Otherwise, try to get it from the last assistant message in the group
+                                                            const lastMessageInGroup = group.messages.findLast(m => m.type === 'assistant');
+                                                            if (lastMessageInGroup) {
+                                                                const parsedLastMsgContent = safeJsonParse<ParsedContent>(lastMessageInGroup.content, {});
+                                                                contentForThinkExtraction = parsedLastMsgContent.content || null;
+                                                            }
+                                                        }
+
+                                                        const thinkTagContent = extractFirstThinkContent(contentForThinkExtraction);
+                                                        const finalReasoningForView = reasoning || thinkTagContent;
+                                                        const isActiveAgent = agentStatus === 'running' || agentStatus === 'connecting';
+
+                                                        // Render ReasoningView if there's dedicated reasoning, extracted think content, or if the agent is actively thinking.
+                                                        if (finalReasoningForView || isActiveAgent) {
+                                                            return (
+                                                                <ReasoningView
+                                                                    key={`consolidated-reasoning-${group.key}`}
+                                                                    content={finalReasoningForView}
+                                                                    isStreamingAgentActive={isActiveAgent}
+                                                                />
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
                                                     
                                                     {/* Message content - ALL messages in the group */}
                                                     <div className="flex max-w-[90%] rounded-lg text-sm break-words overflow-hidden">
@@ -598,7 +662,8 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                                             handleOpenFileViewer,
                                                                             sandboxId,
                                                                             project,
-                                                                            debugMode
+                                                                            debugMode,
+                                                                            true // ignoreThinkTags = true
                                                                         );
 
                                                                         elements.push(
@@ -649,20 +714,45 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                                         }
 
 
-                                                                        const textToRender = streamingTextContent || '';
-                                                                        const textBeforeTag = detectedTag ? textToRender.substring(0, tagStartIndex) : textToRender;
-                                                                        const showCursor = (streamHookStatus === 'streaming' || streamHookStatus === 'connecting') && !detectedTag;
-                                                                        const IconComponent = detectedTag && detectedTag !== 'function_calls' ? getToolIcon(detectedTag) : null;
+                                                                        const rawStreamingText = streamingTextContent || '';
+                                                                        // Since <think> tags are handled by the consolidated ReasoningView,
+                                                                        // we strip them here before passing to Markdown for the main assistant speech.
+                                                                        const strippedStreamingText = rawStreamingText.replace(/<think>((?:.|\n)*?)<\/think>/gi, '');
+
+                                                                        let detectedTag: string | null = null;
+                                                                        let tagStartIndex = -1;
+                                                                        if (strippedStreamingText) { // Check on stripped content
+                                                                            const functionCallsIndex = strippedStreamingText.indexOf('<function_calls>');
+                                                                            if (functionCallsIndex !== -1) {
+                                                                                detectedTag = 'function_calls';
+                                                                                tagStartIndex = functionCallsIndex;
+                                                                            } else {
+                                                                                for (const tag of HIDE_STREAMING_XML_TAGS) {
+                                                                                    const openingTagPattern = `<${tag}`;
+                                                                                    const index = strippedStreamingText.indexOf(openingTagPattern);
+                                                                                    if (index !== -1) {
+                                                                                        detectedTag = tag;
+                                                                                        tagStartIndex = index;
+                                                                                        break;
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                        const textToRenderForSpeech = detectedTag ? strippedStreamingText.substring(0, tagStartIndex) : strippedStreamingText;
+                                                                        const showCursor = (streamHookStatus === 'streaming' || streamHookStatus === 'connecting') && !detectedTag && textToRenderForSpeech; // Only show cursor if there's text or about to be text
 
                                                                         return (
                                                                             <>
-                                                                                {textBeforeTag && (
-                                                                                    <Markdown className="text-sm prose prose-sm dark:prose-invert chat-markdown max-w-none [&>:first-child]:mt-0 prose-headings:mt-3 break-words overflow-wrap-anywhere">{textBeforeTag}</Markdown>
+                                                                                {textToRenderForSpeech && (
+                                                                                    <Markdown className="text-sm prose prose-sm dark:prose-invert chat-markdown max-w-none [&>:first-child]:mt-0 prose-headings:mt-3 break-words overflow-wrap-anywhere">
+                                                                                        {textToRenderForSpeech}
+                                                                                    </Markdown>
                                                                                 )}
                                                                                 {showCursor && (
                                                                                     <span className="inline-block h-4 w-0.5 bg-primary ml-0.5 -mb-1 animate-pulse" />
                                                                                 )}
-
+                                                                                {/* XML Tag/Tool usage indicators remain the same */}
                                                                                 {detectedTag && detectedTag !== 'function_calls' && (
                                                                                     <div className="mt-2 mb-1">
                                                                                         <button
@@ -743,26 +833,49 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                                             }
                                                                         }
 
-                                                                        const textToRender = streamingText || '';
-                                                                        const textBeforeTag = detectedTag ? textToRender.substring(0, tagStartIndex) : textToRender;
-                                                                        const showCursor = isStreamingText && !detectedTag;
+                                                                        const rawPlaybackStreamingText = streamingText || '';
+                                                                        // Strip <think> tags for playback mode assistant speech as well
+                                                                        const strippedPlaybackStreamingText = rawPlaybackStreamingText.replace(/<think>((?:.|\n)*?)<\/think>/gi, '');
+
+                                                                        let detectedTag: string | null = null;
+                                                                        let tagStartIndex = -1;
+                                                                        if (strippedPlaybackStreamingText) { // Check on stripped content
+                                                                            const functionCallsIndex = strippedPlaybackStreamingText.indexOf('<function_calls>');
+                                                                            if (functionCallsIndex !== -1) {
+                                                                                detectedTag = 'function_calls';
+                                                                                tagStartIndex = functionCallsIndex;
+                                                                            } else {
+                                                                                for (const tag of HIDE_STREAMING_XML_TAGS) {
+                                                                                    const openingTagPattern = `<${tag}`;
+                                                                                    const index = strippedPlaybackStreamingText.indexOf(openingTagPattern);
+                                                                                    if (index !== -1) {
+                                                                                        detectedTag = tag;
+                                                                                        tagStartIndex = index;
+                                                                                        break;
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                        const textToRenderForPlaybackSpeech = detectedTag ? strippedPlaybackStreamingText.substring(0, tagStartIndex) : strippedPlaybackStreamingText;
+                                                                        const showCursor = isStreamingText && !detectedTag && textToRenderForPlaybackSpeech;
 
                                                                         return (
                                                                             <>
                                                                                 {/* In debug mode, show raw streaming content */}
                                                                                 {debugMode && streamingText ? (
                                                                                     <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-auto p-2 border border-border rounded-md bg-muted/30">
-                                                                                        {streamingText}
+                                                                                        {strippedPlaybackStreamingText}
                                                                                     </pre>
                                                                                 ) : (
                                                                                     <>
-                                                                                        {textBeforeTag && (
-                                                                                            <Markdown className="text-sm prose prose-sm dark:prose-invert chat-markdown max-w-none [&>:first-child]:mt-0 prose-headings:mt-3 break-words overflow-wrap-anywhere">{textBeforeTag}</Markdown>
+                                                                                        {textToRenderForPlaybackSpeech && (
+                                                                                            <Markdown className="text-sm prose prose-sm dark:prose-invert chat-markdown max-w-none [&>:first-child]:mt-0 prose-headings:mt-3 break-words overflow-wrap-anywhere">{textToRenderForPlaybackSpeech}</Markdown>
                                                                                         )}
                                                                                         {showCursor && (
                                                                                             <span className="inline-block h-4 w-0.5 bg-primary ml-0.5 -mb-1 animate-pulse" />
                                                                                         )}
-
+                                                                                        {/* XML Tag/Tool usage indicators remain the same */}
                                                                                         {detectedTag && (
                                                                                             <div className="mt-2 mb-1">
                                                                                                 <button
@@ -784,8 +897,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                             )}
                                                         </div>
                                                     </div>
-                                                    {/* Display ReasoningView if reasoning content exists for this assistant turn */}
-                                                    {reasoning && groupIndex === groupedMessages.length -1 && <ReasoningView content={reasoning} />}
+                                                    {/* ReasoningView was here, moved up */}
                                                 </div>
                                             </div>
                                         );

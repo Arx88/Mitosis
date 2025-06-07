@@ -224,6 +224,28 @@
   }
 }
 
+/* ReasoningView thought animation */
+@keyframes slideUpEnter {
+  from {
+    opacity: 0;
+    transform: translateY(1em); /* Slide up by roughly one line height */
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.thought-item {
+  animation: slideUpEnter 0.5s ease-out forwards;
+}
+
+.thoughts-list-container {
+  /* Placeholder for potential future use with staggering child animations */
+  display: flex;
+  flex-direction: column;
+}
+
 /* ReasoningView styles */
 .reasoning-view-container {
   border: 1px solid #ccc; /* Light mode border */

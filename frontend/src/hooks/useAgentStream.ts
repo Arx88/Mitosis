@@ -32,7 +32,9 @@ export interface UseAgentStreamResult {
   toolCall: ParsedContent | null;
   error: string | null;
   agentRunId: string | null; // Expose the currently managed agentRunId
-  reasoning: string | null; // <--- AÑADIR ESTA LÍNEA
+  // Holds dedicated reasoning/thought content streamed from the agent.
+  // This is separate from <think> tags that might appear in assistant's main content stream.
+  reasoning: string | null;
   startStreaming: (runId: string) => void;
   stopStreaming: () => Promise<void>;
 }
@@ -78,6 +80,7 @@ export function useAgentStream(
   >([]);
   const [toolCall, setToolCall] = useState<ParsedContent | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // State for storing dedicated reasoning content.
   const [reasoning, setReasoning] = useState<string | null>(null);
 
   const streamCleanupRef = useRef<(() => void) | null>(null);
@@ -298,6 +301,9 @@ export function useAgentStream(
 
       switch (message.type) {
         case 'reasoning':
+          // Handles messages specifically of type 'reasoning'.
+          // This updates the `reasoning` state, which is then used by UI components
+          // to display the agent's thought process separately.
           setReasoning(parsedContent.content); // Assuming content is directly the reasoning string
           break;
         case 'assistant':
@@ -638,7 +644,7 @@ export function useAgentStream(
     toolCall,
     error,
     agentRunId,
-    reasoning, // <-- EXPONER EL ESTADO
+    reasoning, // Expose the reasoning state to consumers of the hook.
     startStreaming,
     stopStreaming,
   };
