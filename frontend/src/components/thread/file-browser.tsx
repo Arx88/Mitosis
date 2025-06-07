@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // Added useCallback
 import {
   Dialog,
   DialogContent,
@@ -44,16 +44,6 @@ export function FileBrowser({
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<string[]>([]);
 
-  // Reset state when dialog opens
-  useEffect(() => {
-    if (isOpen) {
-      loadFiles('');
-    } else {
-      setFileContent(null);
-      setSelectedFile(null);
-    }
-  }, [isOpen, sandboxId, loadFiles]);
-
   // Load files from the current path
   const loadFiles = useCallback(async (path: string) => {
     setIsLoading(true);
@@ -76,6 +66,16 @@ export function FileBrowser({
       setIsLoading(false);
     }
   }, [sandboxId, setFiles, setCurrentPath, setBreadcrumbs, setIsLoading]);
+
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (isOpen) {
+      loadFiles('');
+    } else {
+      setFileContent(null);
+      setSelectedFile(null);
+    }
+  }, [isOpen, sandboxId, loadFiles]);
 
   // Load file content
   const loadFileContent = async (path: string) => {
