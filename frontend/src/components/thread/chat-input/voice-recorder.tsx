@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react'; // Added useCallback
 import { Mic, Square, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranscription } from '@/hooks/react-query/transcription/use-transcription';
@@ -22,6 +22,12 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     const maxTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const transcriptionMutation = useTranscription();
+
+    const stopRecording = useCallback(() => {
+        if (mediaRecorderRef.current && state === 'recording') {
+            mediaRecorderRef.current.stop();
+        }
+    }, [state]);
 
     // Auto-stop recording after 15 minutes
     useEffect(() => {
@@ -95,12 +101,6 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             setState('idle');
         }
     };
-
-    const stopRecording = useCallback(() => {
-        if (mediaRecorderRef.current && state === 'recording') {
-            mediaRecorderRef.current.stop();
-        }
-    }, [state]);
 
     const cancelRecording = () => {
         if (mediaRecorderRef.current && state === 'recording') {
