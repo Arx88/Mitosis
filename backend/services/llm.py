@@ -356,6 +356,51 @@ async def make_llm_api_call(
     logger.error(error_msg, exc_info=True)
     raise LLMRetryError(error_msg)
 
+
+async def get_ollama_models() -> List[str]:
+    """
+    Fetches the available models from the Ollama API.
+
+    Returns:
+        list: A list of model names, or an empty list if an error occurs.
+    """
+    logger.info("Attempting to fetch Ollama models.")
+
+    if hasattr(config, 'OLLAMA_ENABLED') and config.OLLAMA_ENABLED is False:
+        logger.warning("Ollama is disabled (OLLAMA_ENABLED is False). Skipping model fetching.")
+        return []
+
+    if not config.OLLAMA_API_BASE:
+        logger.error("OLLAMA_API_BASE is not configured. Cannot fetch Ollama models.")
+        return []
+
+    logger.info(f"Using Ollama API Base URL: {config.OLLAMA_API_BASE}")
+    url = f"{config.OLLAMA_API_BASE}/api/tags"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    models = [model.get("name") for model in data.get("models", []) if model.get("name")]
+                    logger.info(f"Successfully fetched {len(models)} Ollama models.")
+                    return models
+                else:
+                    logger.error(f"Failed to fetch Ollama models. Status: {response.status}, Response: {await response.text()}")
+                    return []
+    except aiohttp.ClientConnectorError as e:
+        logger.error(f"Connection error while fetching Ollama models: {e}", exc_info=True)
+        return []
+    except asyncio.TimeoutError:
+        logger.error("Timeout while fetching Ollama models.", exc_info=True)
+        return []
+    except json.JSONDecodeError as e:
+        logger.error(f"Error decoding JSON response from Ollama: {e}", exc_info=True)
+        return []
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while fetching Ollama models: {e}", exc_info=True)
+        return []
+
 async def is_ollama_model_available(model_name: str) -> bool:
     """
     Checks if a given Ollama model is available by querying the Ollama API.
