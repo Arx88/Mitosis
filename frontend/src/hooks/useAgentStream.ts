@@ -35,6 +35,7 @@ export interface UseAgentStreamResult {
   // Holds dedicated reasoning/thought content streamed from the agent.
   // This is separate from <think> tags that might appear in assistant's main content stream.
   reasoning: string | null;
+  isThinkingInProgress: boolean; // New: To control the thinking timer more precisely
   startStreaming: (runId: string) => void;
   stopStreaming: () => Promise<void>;
 }
@@ -82,6 +83,7 @@ export function useAgentStream(
   const [error, setError] = useState<string | null>(null);
   // State for storing dedicated reasoning content.
   const [reasoning, setReasoning] = useState<string | null>(null);
+  const [isThinkingInProgress, setIsThinkingInProgress] = useState<boolean>(false);
 
   const streamCleanupRef = useRef<(() => void) | null>(null);
   const isMountedRef = useRef<boolean>(true);
@@ -147,6 +149,8 @@ export function useAgentStream(
   const finalizeStream = useCallback(
     (finalStatus: string, runId: string | null = agentRunId) => {
       if (!isMountedRef.current) return;
+
+      setIsThinkingInProgress(false); // Ensure thinking stops on any finalization
 
       const currentThreadId = threadIdRef.current; // Get current threadId from ref
       const currentSetMessages = setMessagesRef.current; // Get current setMessages from ref
@@ -305,6 +309,7 @@ export function useAgentStream(
           // This updates the `reasoning` state, which is then used by UI components
           // to display the agent's thought process separately.
           setReasoning(parsedContent.content); // Assuming content is directly the reasoning string
+          setIsThinkingInProgress(true); // Ensure thinking is marked as started when reasoning is received
           break;
         case 'assistant':
           console.log('[useAgentStream] test a:', parsedContent.content);
@@ -336,6 +341,9 @@ export function useAgentStream(
           break;
         case 'status':
           switch (parsedContent.status_type) {
+            case 'thinking_completed': // New: Handle backend signal for thinking completion
+              setIsThinkingInProgress(false);
+              break;
             case 'tool_started':
               setToolCall({
                 role: 'assistant',
@@ -529,6 +537,7 @@ export function useAgentStream(
       setToolCall(null);
       setError(null);
       setAgentRunId(null);
+      setIsThinkingInProgress(false); // Reset on unmount
       currentRunIdRef.current = null;
     };
   }, []); // Empty dependency array for mount/unmount effect
@@ -541,6 +550,8 @@ export function useAgentStream(
       console.log(
         `[useAgentStream] Received request to start streaming for ${runId}`,
       );
+
+      setIsThinkingInProgress(false); // Reset from any previous run
 
       // Clean up any previous stream
       if (streamCleanupRef.current) {
@@ -569,12 +580,14 @@ export function useAgentStream(
             `[useAgentStream] Agent run ${runId} is not in running state (status: ${agentStatus.status}). Cannot start stream.`,
           );
           setError(`Agent run is not running (status: ${agentStatus.status})`);
-          finalizeStream(
+          finalizeStream( // finalizeStream will set isThinkingInProgress to false
             mapAgentStatus(agentStatus.status) || 'agent_not_running',
             runId,
           );
           return;
         }
+
+        setIsThinkingInProgress(true); // Agent is confirmed running, start thinking timer
 
         // Agent is running, proceed to create the stream
         console.log(
@@ -645,6 +658,7 @@ export function useAgentStream(
     error,
     agentRunId,
     reasoning, // Expose the reasoning state to consumers of the hook.
+    isThinkingInProgress, // Expose the new thinking status
     startStreaming,
     stopStreaming,
   };
