@@ -242,6 +242,7 @@ export default function ThreadPage({
     threadId,
     setMessages,
   );
+  console.log(`[TIMER_DEBUG] page.tsx - Value from useAgentStream - isThinkingInProgress:`, isThinkingInProgress);
 
   const handleSubmitMessage = useCallback(
     async (
@@ -566,6 +567,9 @@ export default function ThreadPage({
     );
   }
 
+  // Log for isThinkingInProgress before rendering ThreadContent
+  console.log(`[TIMER_DEBUG] page.tsx - Passing to ThreadContent - isAgentActuallyThinking:`, isThinkingInProgress);
+
   return (
     <>
       <ThreadLayout
@@ -622,7 +626,7 @@ export default function ThreadPage({
           reasoning={reasoning}
           isAgentActuallyThinking={isThinkingInProgress} // New: Pass down the thinking status
         />
-
+      {/* Console log for isAgentActuallyThinking moved before the main return statement */}
         <div
           className={cn(
             "fixed bottom-0 z-10 bg-gradient-to-t from-background via-background/90 to-transparent px-4 pt-8 transition-all duration-200 ease-in-out",

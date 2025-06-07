@@ -317,6 +317,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
     reasoning, // This is props.reasoning from the dedicated stream
     isAgentActuallyThinking,
 }) => {
+    console.log(`[TIMER_DEBUG] ThreadContent - Received props.isAgentActuallyThinking:`, isAgentActuallyThinking);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const latestMessageRef = useRef<HTMLDivElement>(null);
@@ -594,6 +595,17 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                         const finalReasoningForView = reasoning || thinkTagContent;
                                                         // Use isAgentActuallyThinking for timer control, default to false if undefined
                                                         const timerControlFlag = isAgentActuallyThinking || false;
+                                                        console.log(`[TIMER_DEBUG] ThreadContent - Passing to ReasoningView as isStreamingAgentActive:`, timerControlFlag);
+
+
+                                                        // Add console logs for debugging reasoning display
+                                                        if (isLastGroup && (streamHookStatus === 'streaming' || streamHookStatus === 'connecting' || reasoning || thinkTagContent)) {
+                                                            console.log(`[REASONING_DEBUG] ThreadContent - PropsReasoning:`, reasoning);
+                                                            console.log(`[REASONING_DEBUG] ThreadContent - StreamingTextContent (raw for think extraction):`, contentForThinkExtraction);
+                                                            console.log(`[REASONING_DEBUG] ThreadContent - ExtractedThinkTagContent:`, thinkTagContent);
+                                                            console.log(`[REASONING_DEBUG] ThreadContent - FinalReasoningForView passed to ReasoningView:`, finalReasoningForView);
+                                                            // console.log(`[REASONING_DEBUG] ThreadContent - TimerControlFlag (isAgentActuallyThinking):`, timerControlFlag); // Already logged by TIMER_DEBUG
+                                                        }
 
                                                         // Render ReasoningView if there's dedicated reasoning, extracted think content, or if the agent is actively thinking (for timer).
                                                         if (finalReasoningForView || timerControlFlag) {
