@@ -318,6 +318,13 @@ export function useAgentStream(
           setIsThinkingInProgress(true); // Ensure thinking is marked as started when reasoning is received
           break;
         case 'assistant':
+          // If thinking was in progress and we receive any assistant content,
+          // assume thinking (for timer purposes) has now transitioned to speaking/responding.
+          if (isThinkingInProgress && parsedContent.content && parsedContent.content.trim() !== '') {
+            console.log(`[TIMER_DEBUG] useAgentStream.handleStreamMessage - First assistant speech chunk received. Setting isThinkingInProgress: false. Chunk:`, parsedContent.content.substring(0, 50));
+            setIsThinkingInProgress(false);
+          }
+
           console.log('[useAgentStream] test a:', parsedContent.content);
           console.log('[useAgentStream] test a1:', parsedMetadata);
           if (
@@ -352,6 +359,8 @@ export function useAgentStream(
               setIsThinkingInProgress(false);
               break;
             case 'tool_started':
+              console.log(`[TIMER_DEBUG] useAgentStream.handleStreamMessage - Tool started ('${parsedContent.function_name}'). Setting isThinkingInProgress: false`);
+              setIsThinkingInProgress(false);
               setToolCall({
                 role: 'assistant',
                 status_type: 'tool_started',
