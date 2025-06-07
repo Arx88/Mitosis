@@ -187,7 +187,17 @@ export function renderMarkdownContent(
 
         const rawXml = match[0];
         const toolName = match[1] || match[2];
-        const toolCallKey = `tool-${match.index}`;
+        const toolCallKey = `tool-${match.index}`; // Keep for existing logic, or adapt key for ReasoningView
+
+        if (toolName === 'think') {
+            const thinkContentMatch = rawXml.match(/<think>((?:.|\n)*?)<\/think>/i);
+            const extractedThinkContent = thinkContentMatch ? thinkContentMatch[1] : '';
+            contentParts.push(
+                <ReasoningView key={`reasoning-${match.index}`} content={extractedThinkContent} />
+            );
+            lastIndex = xmlRegex.lastIndex;
+            continue; // Skip other tool processing for <think>
+        }
 
         if (toolName === 'ask') {
             // Extract attachments from the XML attributes
