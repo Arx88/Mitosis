@@ -1,7 +1,7 @@
 # Placeholder for the new tool code from the issue description
 import os
 import json
-import logging
+# import logging # Replaced with utils.logger
 import tempfile
 import asyncio
 from typing import Dict, Any, List, Optional, Union # Ensure Optional is imported
@@ -9,16 +9,10 @@ from datetime import datetime
 
 from sandbox.tool_base import SandboxToolsBase
 from agentpress.thread_manager import ThreadManager
-from agentpress.tool import ToolResult, openapi_schema # Removed Tool as it's not directly used for class inheritance here
-import os
-import json
-import logging
-import tempfile
-import asyncio # Keep for subprocess if sandbox.run_command is not sufficient for all cases or for internal async ops
-from typing import Dict, Any, List, Optional, Union # Ensure Optional is imported
-from datetime import datetime
+from agentpress.tool import ToolResult, openapi_schema
+from utils.logger import logger # Added global logger
 
-logger = logging.getLogger(__name__)
+# logger = logging.getLogger(__name__) # Replaced with global logger
 
 class SandboxDocumentGenerationTool(SandboxToolsBase):
 
@@ -42,12 +36,13 @@ class SandboxDocumentGenerationTool(SandboxToolsBase):
         await self._ensure_sandbox() # Ensure sandbox is available
         if not hasattr(self, '_dirs_initialized'):
             for directory in [self.templates_dir, self.documents_dir]:
-                logger.info(f"Ensuring directory in sandbox: {directory}")
+                logger.info(f"SandboxDocGenTool: Ensuring directory in sandbox: {directory}")
                 # Use run_command to create directories inside the sandbox
                 # The path used here must be the path *inside* the sandbox
                 result = await self.sandbox.run_command(f"mkdir -p {directory}")
+                logger.info(f"SandboxDocGenTool: mkdir command for {directory} exited with {result.exit_code}. Stdout: {result.stdout}. Stderr: {result.stderr}")
                 if result.exit_code != 0:
-                    logger.error(f"Failed to create directory {directory} in sandbox: {result.stderr}")
+                    logger.error(f"SandboxDocGenTool: Failed to create directory {directory} in sandbox (details above).")
                     # Depending on strictness, might raise an error or just log
                     # For now, let's log and continue, assuming some paths might exist or be read-only
             self._dirs_initialized = True
@@ -138,7 +133,7 @@ class SandboxDocumentGenerationTool(SandboxToolsBase):
         template_filename = f"{safe_template_name}.{template_type}"
         template_sandbox_path = f"{self.templates_dir}/{template_filename}"
 
-        logger.info(f"Creating template {template_sandbox_path} of type {template_type} in sandbox")
+        logger.info(f"SandboxDocGenTool: Attempting to create document template. Project ID: {self.project_id}, Template Name: {template_name}, Type: {template_type}")
 
         # Use a temporary file on the agent host to upload content to the sandbox
         try:
@@ -146,15 +141,20 @@ class SandboxDocumentGenerationTool(SandboxToolsBase):
                 tmp_file.write(content)
                 host_temp_path = tmp_file.name
 
+            logger.info(f"SandboxDocGenTool: Uploading template from host {host_temp_path} to sandbox {template_sandbox_path}")
             await self.sandbox.upload_file(host_temp_path, template_sandbox_path)
+            logger.info(f"SandboxDocGenTool: Successfully uploaded template to {template_sandbox_path}")
             os.remove(host_temp_path) # Clean up temp file on host
 
             if await self.sandbox.file_exists(template_sandbox_path):
                 return self.success_response({"template_sandbox_path": template_sandbox_path, "message": "Template created successfully in sandbox."})
             else:
-                return self.fail_response(f"Failed to create template file {template_sandbox_path} in sandbox after upload.")
+                # This case might be redundant if upload_file throws an error on failure, but good for robustness
+                logger.error(f"SandboxDocGenTool: Upload to {template_sandbox_path} reported success, but file not found in sandbox.")
+                return self.fail_response(f"Failed to create template file {template_sandbox_path} in sandbox after upload (file not found).")
         except Exception as e:
-            logger.exception(f"Error creating document template {template_name}: {e}")
+            logger.error(f"SandboxDocGenTool: Error creating document template {template_name}. Exception: {str(e)}")
+            # logger.exception(f"Error creating document template {template_name}: {e}") # logger.exception includes stack trace
             return self.fail_response(f"Error creating document template: {str(e)}")
 
     @openapi_schema({
@@ -389,7 +389,7 @@ except Exception as e:
     })
     async def create_report(self, data_source_urls_json_string: str, report_title: str, output_file_sandbox_path: str, report_type: str = "summary", output_format: str = "pdf") -> ToolResult:
         await self._ensure_dirs()
-        logger.info(f"Creating report '{report_title}' at {output_file_sandbox_path} (format: {output_format}) in sandbox")
+        logger.info(f"SandboxDocGenTool: Attempting to create report. Project ID: {self.project_id}, Title: {report_title}, Output Path: {output_file_sandbox_path}, Format: {output_format}")
 
         try:
             data_sources = json.loads(data_source_urls_json_string)
@@ -417,54 +417,66 @@ except Exception as e:
                 tmp_md_file.write(simulated_fetched_data_content)
                 host_temp_md_path = tmp_md_file.name
 
+            logger.info(f"SandboxDocGenTool: Uploading temporary report markdown from host {host_temp_md_path} to sandbox {temp_markdown_sandbox_path}")
             await self.sandbox.upload_file(host_temp_md_path, temp_markdown_sandbox_path)
+            logger.info(f"SandboxDocGenTool: Successfully uploaded temporary report markdown to {temp_markdown_sandbox_path}")
             os.remove(host_temp_md_path)
         except Exception as e:
-            logger.exception(f"Error creating temporary markdown for report: {e}")
+            logger.error(f"SandboxDocGenTool: Error creating temporary markdown for report. Exception: {str(e)}")
+            # logger.exception(f"Error creating temporary markdown for report: {e}") # logger.exception includes stack trace
             return self.fail_response(f"Failed to stage report content in sandbox: {str(e)}")
 
         # Now, convert this Markdown file to the desired output_format
         if output_format.lower() == "md" or output_format.lower() == "markdown":
-            # If output is Markdown, just rename/move the temp file
-            # This assumes output_file_sandbox_path is different from temp_markdown_sandbox_path
-            # Or, if they can be the same, the upload above could have used output_file_sandbox_path directly.
-            # For clarity, let's assume we "copy" it.
-            # await self.sandbox.run_command(f"cp {temp_markdown_sandbox_path} {output_file_sandbox_path}")
-            # Better: if format is md, the temp file *is* the output file (adjust path above)
-            # For this example, let's assume the initial temp file was the target if format is md.
-            # If temp_markdown_sandbox_path was correctly named output_file_sandbox_path:
-            if temp_markdown_sandbox_path == output_file_sandbox_path: # This would be true if logic was slightly different
-                 if await self.sandbox.file_exists(output_file_sandbox_path):
-                    await self.sandbox.run_command(f"rm {temp_markdown_sandbox_path}", timeout=10) # clean if it was not the target
-                    return self.success_response({"output_file_sandbox_path": output_file_sandbox_path, "message": "Report (Markdown) created successfully."})
-                 else: # Should not happen if upload was ok
-                    return self.fail_response("Failed to create Markdown report (file missing).")
+            # If output is Markdown, the temp file is effectively the final content.
+            # If output_file_sandbox_path is different, we'd copy/move.
+            # For simplicity, if target is MD, we assume temp_markdown_sandbox_path can be directly used or copied.
+            # This section implies that if output is MD, it might skip the convert_document call.
+            # Let's ensure output_file_sandbox_path is respected.
+            if temp_markdown_sandbox_path != output_file_sandbox_path:
+                logger.info(f"SandboxDocGenTool: Copying temporary markdown {temp_markdown_sandbox_path} to final path {output_file_sandbox_path}")
+                copy_cmd_result = await self.sandbox.run_command(f"cp {temp_markdown_sandbox_path} {output_file_sandbox_path}")
+                if copy_cmd_result.exit_code != 0:
+                    logger.error(f"SandboxDocGenTool: Failed to copy temp markdown to final path. Error: {copy_cmd_result.stderr}")
+                    await self.sandbox.run_command(f"rm {temp_markdown_sandbox_path}", timeout=10) # Clean up temp
+                    return self.fail_response(f"Failed to copy temporary markdown to final path {output_file_sandbox_path}.")
 
-            # If it must be a distinct operation:
-            # Re-write the temp file to the final md path if different
-            # This is a bit clunky, ideally the temp file is the final if format is md.
-            # Let's assume for this example, if output is MD, we use the convert function to "convert" md to md (effectively a copy)
-            # This simplifies the logic flow at the cost of a slight inefficiency.
-            pass # Fall through to convert_document logic below which handles md->md as a copy
+            # If temp_markdown_sandbox_path was the same as output_file_sandbox_path, it's already there.
+            if await self.sandbox.file_exists(output_file_sandbox_path):
+                logger.info(f"SandboxDocGenTool: Report is already in Markdown format at {output_file_sandbox_path}")
+                await self.sandbox.run_command(f"rm {temp_markdown_sandbox_path}", timeout=10) # Clean up temp if it was different and copied
+                return self.success_response({"output_file_sandbox_path": output_file_sandbox_path, "message": "Report (Markdown) created successfully."})
+            else: # Should not happen if logic above is correct
+                await self.sandbox.run_command(f"rm {temp_markdown_sandbox_path}", timeout=10) # Clean up temp
+                return self.fail_response("Failed to create Markdown report (file missing at final path).")
 
         # Use convert_document for PDF, HTML, DOCX etc.
-        conversion_result = await self.convert_document(
+        logger.info(f"SandboxDocGenTool: Converting temporary markdown {temp_markdown_sandbox_path} to {output_format} at {output_file_sandbox_path} using self.convert_document.")
+        conversion_result_tool_result = await self.convert_document( # Capture ToolResult object
             input_file_sandbox_path=temp_markdown_sandbox_path,
             output_file_sandbox_path=output_file_sandbox_path,
             output_format=output_format,
             input_format="md" # Explicitly state input is markdown
         )
 
+        # Log the result of the conversion based on ToolResult structure
+        if conversion_result_tool_result.output and not conversion_result_tool_result.error_message:
+            logger.info(f"SandboxDocGenTool: Conversion successful. Result: {conversion_result_tool_result.output}")
+        else:
+            logger.error(f"SandboxDocGenTool: Conversion failed. Error: {conversion_result_tool_result.error_message}, Full ToolResult: {conversion_result_tool_result}")
+
+
         # Clean up the temporary markdown file
+        logger.info(f"SandboxDocGenTool: Cleaning up temporary markdown file {temp_markdown_sandbox_path}")
         await self.sandbox.run_command(f"rm {temp_markdown_sandbox_path}", timeout=10)
 
-        if not conversion_result.error_message: # Check if conversion was successful
+        if not conversion_result_tool_result.error_message: # Check ToolResult for error
              return self.success_response({
-                "output_file_sandbox_path": output_file_sandbox_path, # from conversion_result.output
+                "output_file_sandbox_path": output_file_sandbox_path,
                 "message": f"Report '{report_title}' created successfully as {output_format}."
             })
         else:
-            return self.fail_response(f"Failed to create report. Content generation was okay, but final conversion to {output_format} failed: {conversion_result.error_message}")
+            return self.fail_response(f"Failed to create report. Content generation was okay, but final conversion to {output_format} failed: {conversion_result_tool_result.error_message}")
 
 
 # Example test (will also need refactoring based on SandboxToolsBase and actual sandbox interaction)

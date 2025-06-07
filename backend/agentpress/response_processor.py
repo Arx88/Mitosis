@@ -1347,6 +1347,11 @@ class ResponseProcessor:
             openapi_tool_info = None
             xml_tool_info = None
 
+            # Conditional logging for file-related tools
+            file_related_tools = ["create_file", "create_document_template", "create_report"]
+            if original_function_name in file_related_tools:
+                logger.info(f"Attempting to execute file-related tool: {original_function_name} with arguments: {arguments}")
+
             if xml_tag_name_from_call:
                 # Attempt to find the tool using the XML tag name registry first
                 xml_tool_info = self.tool_registry.get_xml_tool(xml_tag_name_from_call)
