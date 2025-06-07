@@ -43,7 +43,6 @@ class _Decorated_DeepResearchToolUpdatedParameters:
     class Config:
         extra = "forbid"
 
-@openapi_schema
 class DeepResearchToolUpdatedOutput:
     """
     Output for the DeepResearchToolUpdated.
@@ -171,7 +170,7 @@ class DeepResearchToolUpdated(Tool):
         </function_calls>
         '''
     )
-    async def run(self, parameters: ActualDeepResearchToolParameters) -> List[ToolResult]:
+    async def run(self, parameters: ActualDeepResearchToolParameters) -> ToolResult:
         """
         Perform deep research on a topic by searching multiple sources, analyzing content, and synthesizing information.
 
@@ -192,7 +191,10 @@ class DeepResearchToolUpdated(Tool):
 
             # Validate parameters
             if not parameters.topic:
-                return [ToolResult.error("A research topic is required.")]
+                # Assuming ToolResult.error is a static method that creates a ToolResult instance
+                # If ToolResult.error is not defined, use self.fail_response
+                # For consistency with fail_response elsewhere in the class:
+                return self.fail_response("A research topic is required.")
 
             if parameters.depth not in ["basic", "standard", "deep"]:
                 parameters.depth = "standard"
@@ -226,20 +228,18 @@ class DeepResearchToolUpdated(Tool):
             report_path = await self._generate_report(parameters.topic, report, parameters.format)
 
             # Return success with the report path and metadata
-            return [
-                ToolResult(
-                    output=DeepResearchToolUpdatedOutput(
-                        report_path=report_path,
-                        message=f"Research on '{parameters.topic}' completed successfully.",
-                        sources_analyzed=len(analyzed_content),
-                    )
+            return ToolResult(
+                output=DeepResearchToolUpdatedOutput(
+                    report_path=report_path,
+                    message=f"Research on '{parameters.topic}' completed successfully.",
+                    sources_analyzed=len(analyzed_content),
                 )
-            ]
+            )
 
         except Exception as e:
             error_message = str(e)
             logger.error(f"Error performing deep research on '{parameters.topic}': {error_message}")
-            return [self.fail_response(f"Error performing research: {error_message[:200]}")]
+            return self.fail_response(f"Error performing research: {error_message[:200]}")
 
     async def _generate_search_queries(self, topic: str, num_queries: int) -> List[str]:
         """Generate multiple search queries based on the main topic."""
