@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { cn } from '@/lib/utils';
-import { marked } from 'marked';
+// import { marked } from 'marked'; // Not needed anymore
 import { memo, useId, useMemo } from 'react';
 import ReactMarkdown, { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock, CodeBlockCode } from '@/components/ui/code-block';
+import { ReasoningView } from '@/components/thread/ReasoningView'; // Import ReasoningView
 
 export type MarkdownProps = {
   children: string;
@@ -13,10 +14,16 @@ export type MarkdownProps = {
   components?: Partial<Components>;
 };
 
-function parseMarkdownIntoBlocks(markdown: string): string[] {
-  const tokens = marked.lexer(markdown);
-  return tokens.map((token: any) => token.raw);
+// Define the data structure for extracted thoughts
+interface ExtractedThought {
+  id: string;
+  content: string;
 }
+
+// function parseMarkdownIntoBlocks(markdown: string): string[] {
+//   const tokens = marked.lexer(markdown);
+//   return tokens.map((token: any) => token.raw);
+// } // Removed as we will process the whole markdown
 
 function extractLanguage(className?: string): string {
   if (!className) return 'plaintext';
@@ -151,38 +158,74 @@ const INITIAL_COMPONENTS: Partial<Components> = {
       </td>
     );
   },
+  // p: handled dynamically below
 };
 
-const MemoizedMarkdownBlock = memo(
-  function MarkdownBlock({
-    content,
-    components = INITIAL_COMPONENTS,
-  }: {
-    content: string;
-    components?: Partial<Components>;
-  }) {
-    return (
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
-      </ReactMarkdown>
-    );
-  },
-  function propsAreEqual(prevProps: any, nextProps: any) {
-    return prevProps.content === nextProps.content;
-  },
-);
-
-MemoizedMarkdownBlock.displayName = 'MemoizedMarkdownBlock';
+// This memoization might need reconsideration if extractedThoughts makes props change too often.
+// For now, removing MemoizedMarkdownBlock and parsing directly in MarkdownComponent.
+// const MemoizedMarkdownBlock = memo(
+//   function MarkdownBlock({
+//     content,
+//     components = INITIAL_COMPONENTS,
+//   }: {
+//     content: string;
+//     components?: Partial<Components>;
+//   }) {
+//     return (
+//       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+//         {content}
+//       </ReactMarkdown>
+//     );
+//   },
+//   function propsAreEqual(prevProps: any, nextProps: any) {
+//     return prevProps.content === nextProps.content;
+//   },
+// );
+// MemoizedMarkdownBlock.displayName = 'MemoizedMarkdownBlock';
 
 function MarkdownComponent({
   children,
-  id,
+  // id, // id might not be needed per block anymore if we don't split
   className,
-  components = INITIAL_COMPONENTS,
+  components: propComponents, // User-provided components
 }: MarkdownProps) {
-  const generatedId = useId();
-  const blockId = id ?? generatedId;
-  const blocks = useMemo(() => parseMarkdownIntoBlocks(children), [children]);
+  // const generatedId = useId(); // May not be needed for the main component id
+  // const blockId = id ?? generatedId; // Not needed if not splitting into blocks
+
+  const { processedMarkdown, extractedThoughts } = useMemo(() => {
+    const thoughts: ExtractedThought[] = [];
+    let markdown = children;
+    const thinkRegex = /<think>((?:.|\n)*?)<\/think>/g;
+    let match;
+    let index = 0;
+    while ((match = thinkRegex.exec(markdown)) !== null) {
+      const id = `reasoning-view-${index++}`;
+      thoughts.push({ id, content: match[1] });
+      markdown = markdown.replace(match[0], `<p>${id}</p>`);
+    }
+    return { processedMarkdown: markdown, extractedThoughts: thoughts };
+  }, [children]);
+
+  const combinedComponents = useMemo(() => {
+    const componentsWithCustomP: Partial<Components> = {
+      ...INITIAL_COMPONENTS,
+      p: ({ node, children: pChildren, ...props }: any) => {
+        const childText =
+          pChildren && typeof pChildren[0] === 'string' ? pChildren[0] : '';
+        const thought = extractedThoughts.find(t => t.id === childText);
+        if (thought) {
+          return <ReasoningView content={thought.content} />;
+        }
+        // Fallback to default paragraph rendering or user-provided 'p'
+        if (propComponents?.p) {
+          return propComponents.p({ node, children: pChildren, ...props });
+        }
+        return <p {...props}>{pChildren}</p>;
+      },
+      // Potentially merge other propComponents here if needed
+    };
+    return { ...componentsWithCustomP, ...propComponents };
+  }, [extractedThoughts, propComponents]);
 
   return (
     <div
@@ -191,13 +234,12 @@ function MarkdownComponent({
         className,
       )}
     >
-      {blocks.map((block, index) => (
-        <MemoizedMarkdownBlock
-          key={`${blockId}-block-${index}`}
-          content={block}
-          components={components}
-        />
-      ))}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={combinedComponents}
+      >
+        {processedMarkdown}
+      </ReactMarkdown>
     </div>
   );
 }
