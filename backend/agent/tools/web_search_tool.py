@@ -347,8 +347,28 @@ class SandboxWebSearchTool(SandboxToolsBase):
             
             # Save results to a file in the /workspace/scrape directory
             scrape_dir = f"{self.workspace_path}/scrape"
-            self.sandbox.fs.create_folder(scrape_dir, "755")
             
+            # Ensure the scrape directory exists using run_command
+            mkdir_command = f"mkdir -p {scrape_dir}"
+            logging.info(f"Ensuring directory exists with command: {mkdir_command}")
+            # Assuming self.sandbox is already ensured by _ensure_sandbox() in the calling method scrape_webpage
+            # And assuming self.sandbox has a run_command method similar to SandboxDocumentGenerationTool
+            # If self.sandbox is the raw sandbox object from _ensure_sandbox in SandboxToolsBase, it might be sandbox.process.execute
+            # Let's assume a higher-level self.sandbox.run_command that matches SandboxDocumentGenerationTool's usage pattern
+            # This method needs to be async if called with await.
+
+            # First, ensure sandbox is available, which should be done by the calling public method.
+            # The _scrape_single_url is a helper. Let's assume self.sandbox is ready.
+            # The `run_command` method on `Sandbox` itself (from `sandbox.py`) is async.
+
+            mkdir_result = await self.sandbox.run_command(mkdir_command)
+            if mkdir_result.exit_code != 0:
+                logging.error(f"Failed to create scrape directory '{scrape_dir}': {mkdir_result.stderr}")
+                # Decide if this is a hard failure or if we can proceed (e.g., if path is /workspace itself)
+                # For now, let's make it a hard failure if we can't create the directory.
+                raise Exception(f"Failed to create scrape directory '{scrape_dir}': {mkdir_result.stderr}")
+            logging.info(f"Successfully ensured scrape directory '{scrape_dir}' exists.")
+
             results_file_path = f"{scrape_dir}/{safe_filename}"
             json_content = json.dumps(formatted_result, ensure_ascii=False, indent=2)
             logging.info(f"Saving content to file: {results_file_path}, size: {len(json_content)} bytes")
