@@ -4,6 +4,7 @@ import { Play, Pause, ArrowDown, FileText, Info } from 'lucide-react';
 import { UnifiedMessage } from '@/components/thread/types';
 import { safeJsonParse } from '@/components/thread/utils';
 import Link from 'next/link';
+import Image from 'next/image'; // Import next/image
 
 // Define the set of tags whose raw XML should be hidden during streaming
 const HIDE_STREAMING_XML_TAGS = new Set([
@@ -109,7 +110,7 @@ export const PlaybackControls = ({
     if (!isPlaying && !isSidePanelOpen) {
       onToggleSidePanel();
     }
-  }, [isPlaying, isSidePanelOpen, onToggleSidePanel]);
+  }, [isPlaying, isSidePanelOpen, onToggleSidePanel, updatePlaybackState]);
 
   const resetPlayback = useCallback(() => {
     updatePlaybackState({
@@ -339,7 +340,6 @@ export const PlaybackControls = ({
   useEffect(() => {
     if (!isPlaying || messages.length === 0) return;
 
-    let playbackTimeout: NodeJS.Timeout;
     let cleanupStreaming: (() => void) | undefined;
 
     const playbackNextMessage = async () => {
@@ -394,7 +394,7 @@ export const PlaybackControls = ({
     };
 
     // Start playback with a small delay
-    playbackTimeout = setTimeout(playbackNextMessage, 500);
+    const playbackTimeout: NodeJS.Timeout = setTimeout(playbackNextMessage, 500);
 
     return () => {
       clearTimeout(playbackTimeout);
@@ -422,8 +422,8 @@ export const PlaybackControls = ({
           <div className="flex-1">
             <div className="flex items-center gap-2">
               <div className="flex items-center justify-center w-6 h-6 rounded-md overflow-hidden bg-primary/10">
-                <Link href="/">
-                  <img
+                <Link href="/" legacyBehavior={false}>
+                  <Image
                     src="/kortix-symbol.svg"
                     alt="Kortix"
                     width={16}

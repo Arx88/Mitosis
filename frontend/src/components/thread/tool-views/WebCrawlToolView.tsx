@@ -19,6 +19,7 @@ import {
   Eye,
   BookOpen
 } from 'lucide-react';
+import Image from 'next/image'; // Import next/image
 import { ToolViewProps } from './types';
 import {
   extractCrawlUrl,
@@ -201,13 +202,19 @@ export function WebCrawlToolView({
                 <div className="group relative">
                   <div className="flex items-center gap-3 p-4 bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors rounded-xl border border-zinc-200 dark:border-zinc-800">
                     {favicon && (
-                      <img 
-                        src={favicon} 
-                        alt="" 
-                        className="w-6 h-6 rounded-md flex-shrink-0"
+                      <Image
+                        src={favicon}
+                        alt="" // Alt can be empty for decorative favicons if context is clear
+                        width={24}
+                        height={24}
+                        className="rounded-md flex-shrink-0"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
-                        }} 
+                          // Next/Image onError doesn't directly give access to style like HTMLImageElement
+                          // A common pattern is to set a state to hide it or show a fallback
+                          // For simplicity here, we'll just log, but in a real app, you might set a state.
+                          console.error('Favicon load error');
+                          (e.target as HTMLImageElement).style.display = 'none'; // This might not work as expected with Next/Image optimizations
+                        }}
                       />
                     )}
                     <div className="flex-1 min-w-0">

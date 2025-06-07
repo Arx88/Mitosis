@@ -171,7 +171,7 @@ export default function ThreadPage({
           break;
       }
     },
-    [threadId],
+    [],
   );
 
   const handleStreamError = useCallback((errorMessage: string) => {
@@ -275,8 +275,6 @@ export default function ThreadPage({
   useEffect(() => {
     if (!isPlaying || messages.length === 0) return;
 
-    let playbackTimeout: NodeJS.Timeout;
-
     const playbackNextMessage = async () => {
       if (currentMessageIndex >= messages.length) {
         setIsPlaying(false);
@@ -292,7 +290,7 @@ export default function ThreadPage({
 
       setCurrentMessageIndex((prevIndex) => prevIndex + 1);
     };
-    playbackTimeout = setTimeout(playbackNextMessage, 500);
+    const playbackTimeout: NodeJS.Timeout = setTimeout(playbackNextMessage, 500);
 
     return () => {
       clearTimeout(playbackTimeout);

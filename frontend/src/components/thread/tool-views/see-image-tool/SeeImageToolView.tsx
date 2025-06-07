@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image'; // Import next/image
 import { Image as ImageIcon, ImageOff, CheckCircle, AlertTriangle, Loader2, Download, ZoomIn, ZoomOut, ExternalLink, Check } from 'lucide-react';
 import { ToolViewProps } from '../types';
 import {
@@ -61,7 +62,7 @@ function SafeImage({ src, alt, filePath, className }: { src: string; alt: string
         URL.revokeObjectURL(imgSrc);
       }
     };
-  }, [src, session?.access_token]);
+  }, [src, session?.access_token, imgSrc]);
 
   const handleError = () => {
     if (attempts < 3) {
@@ -150,9 +151,13 @@ function SafeImage({ src, alt, filePath, className }: { src: string; alt: string
         isZoomed ? "cursor-zoom-out" : "cursor-zoom-in"
       )}>
         <div className="relative flex items-center justify-center">
-          <img
-            src={imgSrc}
+          {/* Ensure parent has defined dimensions or Image uses layout="intrinsic" with w/h for aspect ratio */}
+          <Image
+            src={imgSrc || "/placeholder.png"} // Added fallback for imgSrc
             alt={alt}
+            width={1920} // Default intrinsic width for aspect ratio
+            height={1080} // Default intrinsic height for aspect ratio
+            layout="intrinsic"
             onClick={handleZoomToggle}
             className={cn(
               "max-w-full object-contain transition-all duration-300 ease-in-out",

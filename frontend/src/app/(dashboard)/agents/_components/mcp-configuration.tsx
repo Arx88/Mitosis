@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, Search, Plus, Settings, ExternalLink, Shield, X, Sparkles, ChevronRight } from 'lucide-react';
+import Image from 'next/image'; // Import next/image
 import { usePopularMCPServers, usePopularMCPServersV2, useMCPServers, useMCPServerDetails } from '@/hooks/react-query/mcp/use-mcp-servers';
 import { cn } from '@/lib/utils';
 
@@ -387,7 +388,7 @@ export const MCPConfiguration: React.FC<MCPConfigurationProps> = ({
                               >
                                 <div className="flex items-start gap-3">
                                   {server.iconUrl ? (
-                                    <img src={server.iconUrl} alt={server.displayName} className="w-6 h-6 rounded" />
+                                    <Image src={server.iconUrl} alt={server.displayName} width={24} height={24} className="rounded" />
                                   ) : (
                                     <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center">
                                       <Sparkles className="h-3 w-3 text-primary" />
@@ -457,7 +458,7 @@ export const MCPConfiguration: React.FC<MCPConfigurationProps> = ({
                                   >
                                     <div className="flex items-start gap-3">
                                       {server.iconUrl ? (
-                                        <img src={server.iconUrl} alt={server.name} className="w-6 h-6 rounded" />
+                                        <Image src={server.iconUrl} alt={server.name} width={24} height={24} className="rounded" />
                                       ) : (
                                         <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center">
                                           <Sparkles className="h-3 w-3 text-primary" />
@@ -518,7 +519,7 @@ export const MCPConfiguration: React.FC<MCPConfigurationProps> = ({
                                     >
                                       <div className="flex items-start gap-3">
                                         {server.iconUrl ? (
-                                          <img src={server.iconUrl} alt={server.name} className="w-6 h-6 rounded" />
+                                          <Image src={server.iconUrl} alt={server.name} width={24} height={24} className="rounded" />
                                         ) : (
                                           <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center">
                                             <Sparkles className="h-3 w-3 text-primary" />

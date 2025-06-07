@@ -52,10 +52,10 @@ export function FileBrowser({
       setFileContent(null);
       setSelectedFile(null);
     }
-  }, [isOpen, sandboxId]);
+  }, [isOpen, sandboxId, loadFiles]);
 
   // Load files from the current path
-  const loadFiles = async (path: string) => {
+  const loadFiles = useCallback(async (path: string) => {
     setIsLoading(true);
     try {
       const files = await listSandboxFiles(sandboxId, path);
@@ -75,7 +75,7 @@ export function FileBrowser({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [sandboxId, setFiles, setCurrentPath, setBreadcrumbs, setIsLoading]);
 
   // Load file content
   const loadFileContent = async (path: string) => {

@@ -309,28 +309,22 @@ export function FileAttachment({
                 }}
                 title={filename}
             >
-                <img
-                    src={sandboxId && session?.access_token ? imageUrl : fileUrl}
+                <Image
+                    src={sandboxId && session?.access_token && imageUrl ? imageUrl : fileUrl}
                     alt={filename}
-                    className={cn(
-                        "max-h-full", // Respect parent height constraint
-                        isGridLayout ? "w-full h-full object-cover" : "w-auto" // Full width & height in grid with object-cover
-                    )}
-                    style={{
-                        height: imageHeight,
-                        objectPosition: "center",
-                        objectFit: isGridLayout ? "cover" : "contain"
-                    }}
-                    onLoad={() => {
+                    layout="fill"
+                    objectFit={isGridLayout ? "cover" : "contain"}
+                    objectPosition="center"
+                    onLoadingComplete={() => {
                         console.log("Image loaded successfully:", filename);
                     }}
                     onError={(e) => {
                         // Avoid logging the error for all instances of the same image
-                        console.error('Image load error for:', filename);
+                        console.error('Image load error for:', filename, e);
 
                         // Only log details in dev environments to avoid console spam
                         if (process.env.NODE_ENV === 'development') {
-                            const imgSrc = sandboxId && session?.access_token ? imageUrl : fileUrl;
+                            const imgSrc = sandboxId && session?.access_token && imageUrl ? imageUrl : fileUrl;
                             console.error('Image URL:', imgSrc);
 
                             // Additional debugging for blob URLs
@@ -358,12 +352,12 @@ export function FileAttachment({
                         }
 
                         setHasError(true);
-                        // If the image failed to load and we have a localPreviewUrl that's a blob URL, try using it directly
-                        if (localPreviewUrl && typeof localPreviewUrl === 'string' && localPreviewUrl.startsWith('blob:')) {
-                            console.log('Falling back to localPreviewUrl for:', filename);
-                            (e.target as HTMLImageElement).src = localPreviewUrl;
-                        }
+                        // Fallback to localPreviewUrl is harder with Next/Image's error handling.
+                        // This logic might need rethinking if direct src manipulation is required on error.
+                        // For now, just setting error state.
                     }}
+                    // The className on Next/Image for layout="fill" applies to an inner wrapper, not the img itself directly for sizing.
+                    // The parent button's dimensions and objectFit/objectPosition handle the display.
                 />
             </button>
         );

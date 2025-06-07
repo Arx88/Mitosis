@@ -381,7 +381,7 @@ export function useCachedFile<T = string>(
       console.error('Error processing file data:', error);
       return null;
     }
-  }, [query.data, options.processFn]);
+  }, [query.data, options]);
   
   return {
     data: processedData,

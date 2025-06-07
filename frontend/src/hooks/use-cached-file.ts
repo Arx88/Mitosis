@@ -77,7 +77,7 @@ export function useCachedFile<T = string>(
     : null;
 
   // Create a cached fetch function
-  const getCachedFile = async (key: string, force = false) => {
+  const getCachedFile = useCallback(async (key: string, force = false) => {
     // Check if we have a valid cached version
     const cached = fileCache.get(key);
     const now = Date.now();
@@ -282,7 +282,7 @@ export function useCachedFile<T = string>(
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filePath, sandboxId, session, options.contentType, options.expiration, setIsLoading]);
 
   // Function to force refresh the cache
   const refreshCache = async () => {
@@ -298,7 +298,7 @@ export function useCachedFile<T = string>(
   };
 
   // Function to get data from cache first, then network if needed
-  const getFileContent = async () => {
+  const getFileContent = useCallback(async () => {
     if (!cacheKey) return;
     
     try {
@@ -325,7 +325,7 @@ export function useCachedFile<T = string>(
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [cacheKey, getCachedFile, options.expiration, setData, setIsLoading, setError]);
 
   useEffect(() => {
     if (sandboxId && filePath) {
@@ -351,7 +351,7 @@ export function useCachedFile<T = string>(
         }
       }
     };
-  }, [sandboxId, filePath, options.contentType]);
+  }, [sandboxId, filePath, options.contentType, cacheKey, getFileContent]);
 
   // Expose the cache manipulation functions
   return {

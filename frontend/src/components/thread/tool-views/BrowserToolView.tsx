@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   CircleDashed,
 } from 'lucide-react';
+import Image from 'next/image'; // Import next/image
 import { ToolViewProps } from './types';
 import {
   extractBrowserUrl,
@@ -207,11 +208,14 @@ export function BrowserToolView({
             <ImageLoader />
           )}
           <Card className={`p-0 overflow-hidden border ${imageLoading ? 'hidden' : 'block'}`}>
-            <img
+            <Image
               src={screenshotUrl}
               alt="Browser Screenshot"
+              width={1024} // Default width for aspect ratio
+              height={768} // Default height for aspect ratio
+              layout="intrinsic"
               className="max-w-full max-h-full object-contain"
-              onLoad={handleImageLoad}
+              onLoadingComplete={handleImageLoad}
               onError={handleImageError}
             />
           </Card>
@@ -232,11 +236,14 @@ export function BrowserToolView({
             <ImageLoader />
           )}
           <Card className={`overflow-hidden border ${imageLoading ? 'hidden' : 'block'}`}>
-            <img
+            <Image
               src={`data:image/jpeg;base64,${screenshotBase64}`}
               alt="Browser Screenshot"
+              width={1024} // Default width for aspect ratio
+              height={768} // Default height for aspect ratio
+              layout="intrinsic"
               className="max-w-full max-h-full object-contain"
-              onLoad={handleImageLoad}
+              onLoadingComplete={handleImageLoad}
               onError={handleImageError}
             />
           </Card>
@@ -351,19 +358,25 @@ export function BrowserToolView({
               )}
               <Card className={`p-0 overflow-hidden border ${imageLoading ? 'hidden' : 'block'}`}>
                 {screenshotUrl ? (
-                  <img
+                  <Image
                     src={screenshotUrl}
                     alt="Browser Screenshot"
+                    width={1024} // Default width for aspect ratio
+                    height={768} // Default height for aspect ratio
+                    layout="intrinsic"
                     className="max-w-full max-h-full object-contain"
-                    onLoad={handleImageLoad}
+                    onLoadingComplete={handleImageLoad}
                     onError={handleImageError}
                   />
                 ) : (
-                  <img
+                  <Image
                     src={`data:image/jpeg;base64,${screenshotBase64}`}
                     alt="Browser Screenshot"
+                    width={1024} // Default width for aspect ratio
+                    height={768} // Default height for aspect ratio
+                    layout="intrinsic"
                     className="max-w-full max-h-full object-contain"
-                    onLoad={handleImageLoad}
+                    onLoadingComplete={handleImageLoad}
                     onError={handleImageError}
                   />
                 )}
