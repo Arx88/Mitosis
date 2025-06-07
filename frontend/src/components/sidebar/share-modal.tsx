@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react" // Added useCallback
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -72,6 +72,11 @@ export function ShareModal({ isOpen, onClose, threadId, projectId }: ShareModalP
 
   const { data: threadData, isLoading: isChecking } = useThreadQuery(threadId || "")
 
+  const generateShareLink = useCallback(() => {
+    if (!threadId) return ""
+    return `${process.env.NEXT_PUBLIC_URL || window.location.origin}/share/${threadId}`
+  }, [threadId]);
+
   useEffect(() => {
     if (threadData?.is_public) {
       const publicUrl = generateShareLink()
@@ -80,11 +85,6 @@ export function ShareModal({ isOpen, onClose, threadId, projectId }: ShareModalP
       setShareLink(null)
     }
   }, [threadData, generateShareLink]);
-
-  const generateShareLink = useCallback(() => {
-    if (!threadId) return ""
-    return `${process.env.NEXT_PUBLIC_URL || window.location.origin}/share/${threadId}`
-  }, [threadId]);
 
   const createShareLink = async () => {
     if (!threadId) return
