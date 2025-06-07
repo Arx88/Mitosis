@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { ToolViewProps } from '../types';
 import { formatTimestamp, getToolTitle } from '../utils';
 import { getToolIcon } from '../../utils';
@@ -39,12 +40,18 @@ export function ToolViewWrapper({
 }: ToolViewWrapperProps) {
   const toolTitle = getToolTitle(name);
   const Icon = getToolIcon(name);
+  const MotionDiv = motion.div;
 
   return (
-    <div className={cn("flex flex-col h-full", className)}>
+    <MotionDiv
+      className={cn("flex flex-col h-full", className)}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
       {(headerContent || showStatus) && (
         <div className={cn(
-          "flex items-center p-2 bg-zinc-100 dark:bg-zinc-900 justify-between border-zinc-200 dark:border-zinc-800",
+          "flex items-center p-2 bg-gradient-to-r from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 justify-between border-zinc-200 dark:border-zinc-800",
           headerClassName
         )}>
           <div className="flex ml-1 items-center">
@@ -63,16 +70,28 @@ export function ToolViewWrapper({
 
       {(footerContent || showStatus) && (
         <div className={cn(
-          "p-4 border-t border-zinc-200 dark:border-zinc-800",
+          "p-4 border-t border-zinc-200 dark:border-zinc-800 bg-gradient-to-r from-zinc-50 to-zinc-100 dark:from-zinc-800 dark:to-zinc-900",
           footerClassName
         )}>
           <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
             {!isStreaming && showStatus && (
               <div className="flex items-center gap-2">
                 {isSuccess ? (
-                  <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                  <motion.div
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
+                  </motion.div>
                 ) : (
-                  <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                  <motion.div
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                  </motion.div>
                 )}
                 <span>
                   {isSuccess
@@ -101,6 +120,6 @@ export function ToolViewWrapper({
           </div>
         </div>
       )}
-    </div>
+    </MotionDiv>
   );
 } 
