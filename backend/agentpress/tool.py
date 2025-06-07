@@ -93,6 +93,17 @@ class ToolResult:
     success: bool
     output: str
 
+@dataclass
+class ToolCall:
+    """Represents a parsed call to a tool.
+
+    Attributes:
+        tool_name (str): The name of the tool to be called.
+        tool_kwargs (Dict[str, Any]): The arguments for the tool.
+    """
+    tool_name: str
+    tool_kwargs: Dict[str, Any]
+
 class Tool(ABC):
     """Abstract base class for all tools.
     

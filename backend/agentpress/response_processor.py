@@ -100,8 +100,8 @@ class ResponseProcessor:
         self.trace = trace
         if not self.trace:
             self.trace = langfuse.trace(name="anonymous:response_processor")
-        # Initialize the XML parser with backwards compatibility
-        self.xml_parser = XMLToolParser(strict_mode=False)
+        # Initialize the XML parser
+        self.xml_parser = XMLToolParser()
         self.is_agent_builder = is_agent_builder
         self.target_agent_id = target_agent_id
 
@@ -1178,7 +1178,7 @@ class ResponseProcessor:
             # Check if this is the new format (contains <function_calls>)
             if '<function_calls>' in xml_chunk and '<invoke' in xml_chunk:
                 # Use the new XML parser
-                parsed_calls = self.xml_parser.parse_content(xml_chunk)
+                parsed_calls = self.xml_parser.parse(xml_chunk)
                 
                 if not parsed_calls:
                     logger.error(f"No tool calls found in XML chunk: {xml_chunk}")
