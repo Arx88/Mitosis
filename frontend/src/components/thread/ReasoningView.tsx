@@ -45,13 +45,22 @@ export const ReasoningView: React.FC<ReasoningViewProps> = ({ content, isStreami
 
   useEffect(() => {
     console.log(`[REASONING_DEBUG] ReasoningView - Received content prop:`, content);
-    if (content && content.trim() !== '') {
-      const thoughts = content.split('\n');
+    const htmlParagraphRegex = /^<p>.*<\/p>$/i;
+    const placeholderRegex = /reasoning-view-\d+/i;
+
+    // Ensure content is treated as a string for .trim() and .split()
+    const currentContentStr = content || "";
+
+    if (currentContentStr.trim() !== '' && !htmlParagraphRegex.test(currentContentStr.trim()) && !placeholderRegex.test(currentContentStr.trim())) {
+      const thoughts = currentContentStr.split('\n');
       setDisplayedThoughts(thoughts);
       console.log(`[REASONING_DEBUG] ReasoningView - Set displayedThoughts:`, thoughts);
     } else {
+      if (currentContentStr && (htmlParagraphRegex.test(currentContentStr.trim()) || placeholderRegex.test(currentContentStr.trim()))) {
+        console.warn(`[REASONING_DEBUG] ReasoningView - Invalid content detected, treating as empty:`, currentContentStr);
+      }
       setDisplayedThoughts([]);
-      console.log(`[REASONING_DEBUG] ReasoningView - Cleared displayedThoughts`);
+      console.log(`[REASONING_DEBUG] ReasoningView - Cleared displayedThoughts (or content was invalid/empty)`);
     }
   }, [content]);
 
