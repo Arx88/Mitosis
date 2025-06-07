@@ -43,7 +43,7 @@ class _Decorated_DeepResearchToolUpdatedParameters:
     class Config:
         extra = "forbid"
 
-class DeepResearchToolUpdatedOutput:
+class DeepResearchToolUpdatedOutput(BaseModel):
     """
     Output for the DeepResearchToolUpdated.
     """
