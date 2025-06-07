@@ -153,6 +153,40 @@ class DeepResearchToolUpdated(Tool):
 
         return self._sandbox
 
+    @openapi_schema({
+        "type": "function",
+        "function": {
+            "name": "deep-search",
+            "description": "Perform deep research on a topic by searching multiple sources, analyzing content, and synthesizing information.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {
+                        "type": "string",
+                        "description": "The research topic or question to investigate in detail."
+                    },
+                    "depth": {
+                        "type": "string",
+                        "description": "The depth of research: 'basic' (quick overview), 'standard' (comprehensive), or 'deep' (exhaustive). Default: standard.",
+                        "enum": ["basic", "standard", "deep"],
+                        "default": "standard"
+                    },
+                    "sources": {
+                        "type": "integer",
+                        "description": "Minimum number of sources to include. Default: 5.",
+                        "default": 5
+                    },
+                    "format": {
+                        "type": "string",
+                        "description": "Format of the final report: 'markdown', 'pdf', or 'html'. Default: markdown.",
+                        "enum": ["markdown", "pdf", "html"],
+                        "default": "markdown"
+                    }
+                },
+                "required": ["topic"]
+            }
+        }
+    })
     @xml_schema(
         tag_name="deep-search",
         # Parameters are passed as a Pydantic model 'parameters',
