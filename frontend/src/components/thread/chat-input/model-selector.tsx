@@ -501,7 +501,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       setIsOpen(false);
       setTimeout(() => setIsOpen(true), 10);
     }
-  }, [customModels, modelOptions, isOpen]); // Also depend on modelOptions to refresh when parent changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Reason: We only want this effect to run when customModels or modelOptions change.
+    // The logic inside then checks the current isOpen state to decide if a refresh-toggle is needed.
+    // isOpen itself should not trigger this effect.
+  }, [customModels, modelOptions]); // Also depend on modelOptions to refresh when parent changes
 
   return (
     <div className="relative">
