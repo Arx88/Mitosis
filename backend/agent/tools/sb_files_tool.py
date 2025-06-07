@@ -121,7 +121,7 @@ class SandboxFilesTool(SandboxToolsBase):
     )
     async def create_file(self, file_path: str, file_contents: str) -> ToolResult:
         try:
-            logger.info(f"Attempting to create file: {file_path} in project {self.project_id}")
+            logger.info(f"SandboxFilesTool: Attempting to create file. Project ID: {self.project_id}, File path: {file_path}")
             # Ensure sandbox is initialized
             await self._ensure_sandbox()
             
@@ -131,7 +131,9 @@ class SandboxFilesTool(SandboxToolsBase):
                 return self.fail_response(f"File '{file_path}' already exists. Use update_file to modify existing files.")
             
             # Write the file content
+            logger.info(f"SandboxFilesTool: Writing to sandbox path: {full_path}")
             await self.sandbox.fs.upload_file(full_path, file_contents.encode('utf-8'))
+            logger.info(f"SandboxFilesTool: Successfully wrote to sandbox path: {full_path}")
             
             # If it reaches here, it's a success.
             final_message = f"File '{file_path}' created successfully."
@@ -148,6 +150,7 @@ class SandboxFilesTool(SandboxToolsBase):
             
             return self.success_response(final_message)
         except Exception as e:
+            logger.error(f"SandboxFilesTool: Error creating file {file_path}. Exception: {str(e)}")
             return self.fail_response(f"Error creating file '{file_path}': {str(e)}")
 
     @openapi_schema({
