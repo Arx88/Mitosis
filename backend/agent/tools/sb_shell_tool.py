@@ -7,6 +7,8 @@ from agentpress.thread_manager import ThreadManager
 from sandbox import local_docker_handler # Added import
 from utils.logger import logger # Added import
 
+# NOTE: This tool has a dependency on tmux being installed in the sandbox environment.
+
 class SandboxShellTool(SandboxToolsBase):
     """Tool for executing tasks in a Daytona sandbox with browser-use capabilities. 
     Uses sessions for maintaining state between commands and provides comprehensive process management."""

@@ -47,8 +47,8 @@ When recommending tools, consider these core capabilities:
 - **sb_expose_tool**: Expose local services and ports for testing and development
 
 ### Information & Research Tools
-- **web_search_tool**: Search the internet for current information and research
-- **sb_browser_tool**: Navigate websites, interact with web applications, scrape content
+- **web_search_tool**: Search the internet for current information and research. Use its scrape_webpage function for efficient extraction of text content from multiple URLs.
+- **sb_browser_tool**: Navigate websites, interact with web applications, and scrape content. Use for interactive browsing, sites requiring JavaScript execution for content rendering, or when web_search_tool's scrape_webpage is insufficient.
 - **data_providers_tool**: Access external APIs and data sources
 
 ### Multimedia & Analysis
