@@ -440,7 +440,9 @@ class DeepResearchToolUpdated(Tool):
 
         # Save the markdown file
         markdown_path = f"{self.research_dir}/{base_filename}.md"
-        await sandbox.fs.write_file(markdown_path, markdown_content)
+        if not isinstance(markdown_content, str):
+            markdown_content = str(markdown_content) # Ensure it's a string
+        await sandbox.fs.upload_file(markdown_path, markdown_content.encode('utf-8'))
 
         # If markdown is requested, we're done
         if format == "markdown":
@@ -472,7 +474,9 @@ class DeepResearchToolUpdated(Tool):
 
             # Save the HTML file
             html_path = f"{self.research_dir}/{base_filename}.html"
-            await sandbox.fs.write_file(html_path, html_content)
+            if not isinstance(html_content, str):
+                html_content = str(html_content) # Ensure it's a string
+            await sandbox.fs.upload_file(html_path, html_content.encode('utf-8'))
             return html_path
 
         # For PDF, use the document generation tool
@@ -501,7 +505,9 @@ class DeepResearchToolUpdated(Tool):
 
             # Save the HTML file
             html_path = f"{self.research_dir}/{base_filename}_temp.html"
-            await sandbox.fs.write_file(html_path, html_content)
+            if not isinstance(html_content, str):
+                html_content = str(html_content) # Ensure it's a string
+            await sandbox.fs.upload_file(html_path, html_content.encode('utf-8'))
 
             # Convert to PDF using the document generation tool
             pdf_path = f"{self.research_dir}/{base_filename}.pdf"
