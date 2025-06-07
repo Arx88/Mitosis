@@ -7,9 +7,10 @@ import React, {
   forwardRef,
   useImperativeHandle,
 } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useAnimation } from 'framer-motion';
 import { Loader2, X } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { handleFiles } from './file-upload-handler';
 import { MessageInput } from './message-input';
 import { AttachmentGroup } from '../attachment-group';
@@ -73,7 +74,7 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
       onAgentSelect,
       agentName,
       messages = [],
-      bgColor = 'bg-sidebar',
+      bgColor = 'bg-sidebar', // This prop will be less relevant for CardContent background due to direct gradient
     },
     ref,
   ) => {
@@ -87,6 +88,8 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
     const [pendingFiles, setPendingFiles] = useState<File[]>([]);
     const [isUploading, setIsUploading] = useState(false);
     const [isDraggingOver, setIsDraggingOver] = useState(false);
+    const cardControls = useAnimation();
+    const MotionDiv = motion.div;
 
     const {
       selectedModel,
@@ -155,6 +158,7 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
       }
 
       setUploadedFiles([]);
+      cardControls.start({ scale: [1, 1.02, 1], transition: { duration: 0.3 } });
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -180,24 +184,20 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
     const removeUploadedFile = (index: number) => {
       const fileToRemove = uploadedFiles[index];
 
-      // Clean up local URL if it exists
       if (fileToRemove.localUrl) {
         URL.revokeObjectURL(fileToRemove.localUrl);
       }
 
-      // Remove from local state immediately for responsive UI
       setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
       if (!sandboxId && pendingFiles.length > index) {
         setPendingFiles((prev) => prev.filter((_, i) => i !== index));
       }
 
-      // Check if file is referenced in existing chat messages before deleting from server
       const isFileUsedInChat = messages.some(message => {
         const content = typeof message.content === 'string' ? message.content : '';
         return content.includes(`[Uploaded File: ${fileToRemove.path}]`);
       });
 
-      // Only delete from server if file is not referenced in chat history
       if (sandboxId && fileToRemove.path && !isFileUsedInChat) {
         deleteFileMutation.mutate({
           sandboxId,
@@ -249,8 +249,14 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
             }
           }}
         >
-          <div className="w-full text-sm flex flex-col justify-between items-start rounded-lg">            
-            <CardContent className={`w-full p-1.5 pb-2 ${bgColor} rounded-2xl border`}>              
+          <MotionDiv className="w-full text-sm flex flex-col justify-between items-start rounded-lg" animate={cardControls}>
+            <CardContent className={cn(
+              "w-full p-1.5 pb-2 rounded-2xl",
+              "bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-700 dark:to-zinc-800",
+              isDraggingOver
+                ? 'border-sky-500 border-2 ring-2 ring-sky-500/50'
+                : 'border border-neutral-200 dark:border-neutral-700'
+            )}>
               {onAgentSelect && (                
                 <div className="mb-2 px-2">                  
                 <AgentSelector                    
@@ -301,20 +307,34 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
                 refreshCustomModels={refreshCustomModels}
               />
             </CardContent>
-          </div>
+          </MotionDiv>
         </Card>
 
         {isAgentRunning && (
-          <motion.div
+          <MotionDiv
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className="pb-4 -mt-4 w-full flex items-center justify-center"
           >
             <div className="text-xs text-muted-foreground flex items-center gap-2">
-              <Loader2 className="h-3 w-3 animate-spin" />
+              <div className="flex space-x-1">
+                {[0, 1, 2].map((i) => (
+                  <MotionDiv
+                    key={i}
+                    className="h-1.5 w-1.5 bg-current rounded-full"
+                    initial={{ opacity: 0.5 }}
+                    animate={{ opacity: [0.5, 1, 0.5] }}
+                    transition={{
+                      duration: 1,
+                      repeat: Infinity,
+                      delay: i * 0.2,
+                    }}
+                  />
+                ))}
+              </div>
               <span>{agentName ? `${agentName} is working...` : 'Suna is working...'}</span>
             </div>
-          </motion.div>
+          </MotionDiv>
         )}
       </div>
     );
