@@ -9,7 +9,6 @@ import {
   ArrowRight,
   TerminalIcon,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { ToolViewProps } from '../types';
 import { formatTimestamp, getToolTitle } from '../utils';
 import { cn } from '@/lib/utils';
@@ -29,7 +28,6 @@ export function CommandToolView({
   isSuccess = true,
   isStreaming = false,
 }: ToolViewProps) {
-  const MotionDiv = motion.div;
   const { resolvedTheme } = useTheme();
   const isDarkTheme = resolvedTheme === 'dark';
   const [showFullOutput, setShowFullOutput] = useState(true);
@@ -106,14 +104,9 @@ export function CommandToolView({
           </div>
           
           {!isStreaming && (
-            <MotionDiv
-              initial={{ opacity: 0, scale: 0.7 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Badge
-                variant="secondary"
-                className={
+            <Badge
+              variant="secondary"
+              className={
                 actualIsSuccess 
                   ? "bg-gradient-to-b from-emerald-200 to-emerald-100 text-emerald-700 dark:from-emerald-800/50 dark:to-emerald-900/60 dark:text-emerald-300" 
                   : "bg-gradient-to-b from-rose-200 to-rose-100 text-rose-700 dark:from-rose-800/50 dark:to-rose-900/60 dark:text-rose-300"
@@ -129,7 +122,6 @@ export function CommandToolView({
                 (name === 'check-command-output' ? 'Failed to retrieve output' : 'Command failed')
               }
             </Badge>
-            </MotionDiv>
           )}
         </div>
       </CardHeader>
@@ -144,19 +136,13 @@ export function CommandToolView({
             filePath={displayText || 'Processing command...'}
             showProgress={true}
           />
-        ) : ( // Combined conditional rendering for command block and output block
+        ) : displayText ? (
           <ScrollArea className="h-full w-full">
             <div className="p-4">
-              {displayText && !isStreaming && (
-                <MotionDiv
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                  className="mb-4 bg-zinc-100 dark:bg-neutral-900 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800"
-                >
-                  <div className="bg-zinc-200 dark:bg-zinc-800 px-4 py-2 flex items-center gap-2">
-                    <Code className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{displayLabel}</span>
+              <div className="mb-4 bg-zinc-100 dark:bg-neutral-900 rounded-lg overflow-hidden border border-zinc-200 dark:border-zinc-800">
+                <div className="bg-zinc-200 dark:bg-zinc-800 px-4 py-2 flex items-center gap-2">
+                  <Code className="h-4 w-4 text-zinc-600 dark:text-zinc-400" />
+                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{displayLabel}</span>
                   {sessionName && cwd && (
                     <Badge variant="outline" className="text-xs ml-auto">
                       {cwd}
@@ -167,32 +153,10 @@ export function CommandToolView({
                   <span className="text-purple-500 dark:text-purple-400 select-none">{displayPrefix}</span>
                   <code className="flex-1 break-all">{displayText}</code>
                 </div>
-                </MotionDiv>
-              )}
-              {!displayText && !isStreaming && ( // Fallback for no command text
-                 <div className="flex flex-col items-center justify-center h-full py-12 px-6 bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-950 dark:to-zinc-900">
-                    <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6 bg-gradient-to-b from-zinc-100 to-zinc-50 shadow-inner dark:from-zinc-800/40 dark:to-zinc-900/60">
-                        <Terminal className="h-10 w-10 text-zinc-400 dark:text-zinc-600" />
-                    </div>
-                    <h3 className="text-xl font-semibold mb-2 text-zinc-900 dark:text-zinc-100">
-                        {name === 'check-command-output' ? 'No Session Found' : 'No Command Found'}
-                    </h3>
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center max-w-md">
-                        {name === 'check-command-output'
-                        ? 'No session name was detected. Please provide a valid session name to check.'
-                        : 'No command was detected. Please provide a valid command to execute.'
-                        }
-                    </p>
-                </div>
-              )}
+              </div>
 
-              {output && !isStreaming && (
-                <MotionDiv
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, ease: "easeOut", delay: 0.1 }}
-                  className="mb-4"
-                >
+              {output && (
+                <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center">
                       <ArrowRight className="h-4 w-4 mr-2 text-zinc-500 dark:text-zinc-400" />
@@ -200,27 +164,23 @@ export function CommandToolView({
                     </h3>
                     <div className="flex items-center gap-2">
                       {completed !== null && (
-                        <MotionDiv initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2, delay: 0.15 }}>
-                          <Badge
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            {completed ? 'Completed' : 'Running'}
-                          </Badge>
-                        </MotionDiv>
+                        <Badge
+                          variant="outline"
+                          className="text-xs"
+                        >
+                          {completed ? 'Completed' : 'Running'}
+                        </Badge>
                       )}
                       {exitCode !== null && (
-                        <MotionDiv initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2, delay: 0.2 }}>
-                          <Badge
-                            className={cn(
-                              exitCode === 0
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                                : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                            )}
-                          >
-                            {exitCode === 0 ? 'Success' : `Exit ${exitCode}`}
-                          </Badge>
-                        </MotionDiv>
+                        <Badge
+                          className={cn(
+                            exitCode === 0
+                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                              : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                          )}
+                        >
+                          {exitCode === 0 ? 'Success' : `Exit ${exitCode}`}
+                        </Badge>
                       )}
                     </div>
                   </div>
@@ -241,15 +201,12 @@ export function CommandToolView({
                     <div className="p-4 max-h-96 overflow-auto scrollbar-hide">
                       <pre className="text-xs text-zinc-600 dark:text-zinc-300 font-mono whitespace-pre-wrap break-all overflow-visible">
                         {linesToShow.map((line, index) => (
-                          <MotionDiv
+                          <div
                             key={index} 
                             className="py-0.5 bg-transparent"
-                            initial={{ opacity: 0, y: 5 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.2, delay: index * 0.05 }}
                           >
                             {line || ' '}
-                          </MotionDiv>
+                          </div>
                         ))}
                         {!showFullOutput && hasMoreLines && (
                           <div className="text-zinc-500 mt-2 border-t border-zinc-700/30 pt-2">
@@ -272,9 +229,22 @@ export function CommandToolView({
               )}
             </div>
           </ScrollArea>
-        )
-        // Removed the original fallback for !displayText as it's now part of the conditional rendering logic for the command block
-        }
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full py-12 px-6 bg-gradient-to-b from-white to-zinc-50 dark:from-zinc-950 dark:to-zinc-900">
+            <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6 bg-gradient-to-b from-zinc-100 to-zinc-50 shadow-inner dark:from-zinc-800/40 dark:to-zinc-900/60">
+              <Terminal className="h-10 w-10 text-zinc-400 dark:text-zinc-600" />
+            </div>
+            <h3 className="text-xl font-semibold mb-2 text-zinc-900 dark:text-zinc-100">
+              {name === 'check-command-output' ? 'No Session Found' : 'No Command Found'}
+            </h3>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center max-w-md">
+              {name === 'check-command-output'
+                ? 'No session name was detected. Please provide a valid session name to check.'
+                : 'No command was detected. Please provide a valid command to execute.'
+              }
+            </p>
+          </div>
+        )}
       </CardContent>
       
       <div className="px-4 py-2 h-10 bg-gradient-to-r from-zinc-50/90 to-zinc-100/90 dark:from-zinc-900/90 dark:to-zinc-800/90 backdrop-blur-sm border-t border-zinc-200 dark:border-zinc-800 flex justify-between items-center gap-4">
