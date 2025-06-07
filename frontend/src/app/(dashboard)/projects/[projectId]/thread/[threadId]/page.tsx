@@ -225,6 +225,8 @@ export default function ThreadPage({
     status: streamHookStatus,
     textContent: streamingTextContent,
     toolCall: streamingToolCall,
+    // `reasoning` holds the dedicated thought/reasoning process content from the agent stream.
+    reasoning,
     error: streamError,
     agentRunId: currentHookRunId,
     startStreaming,
@@ -615,6 +617,8 @@ export default function ThreadPage({
           debugMode={debugMode}
           agentName={agent && agent.name}
           agentAvatar={agent && agent.avatar}
+          // Pass the dedicated reasoning content to ThreadContent.
+          reasoning={reasoning}
         />
 
         <div
