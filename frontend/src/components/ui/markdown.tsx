@@ -209,9 +209,12 @@ function MarkdownComponent({
     const componentsWithCustomP: Partial<Components> = {
       ...INITIAL_COMPONENTS,
       p: ({ node, children: pChildren, ...props }: any) => {
-        const childText =
-          pChildren && typeof pChildren[0] === 'string' ? pChildren[0] : '';
-        const thought = extractedThoughts.find(t => t.id === childText);
+        // Ensure pChildren is a flat string if it's a simple text node,
+        // ReactMarkdown might pass an array with one string.
+        const childTextNode = Array.isArray(pChildren) ? pChildren[0] : pChildren;
+        const potentialId = typeof childTextNode === 'string' ? childTextNode : '';
+
+        const thought = extractedThoughts.find(t => t.id === potentialId);
         if (thought) {
           return <ReasoningView content={thought.content} />;
         }
