@@ -287,6 +287,7 @@ export interface ThreadContentProps {
     agentAvatar?: React.ReactNode;
     emptyStateComponent?: React.ReactNode; // Add custom empty state component prop
     reasoning?: string | null;
+    isAgentActuallyThinking?: boolean; // New prop for precise timer control
 }
 
 export const ThreadContent: React.FC<ThreadContentProps> = ({
@@ -310,6 +311,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
     agentAvatar = <KortixLogo size={16} />,
     emptyStateComponent,
     reasoning, // This is props.reasoning from the dedicated stream
+    isAgentActuallyThinking,
 }) => {
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -586,15 +588,16 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
 
                                                         const thinkTagContent = extractFirstThinkContent(contentForThinkExtraction);
                                                         const finalReasoningForView = reasoning || thinkTagContent;
-                                                        const isActiveAgent = agentStatus === 'running' || agentStatus === 'connecting';
+                                                        // Use isAgentActuallyThinking for timer control, default to false if undefined
+                                                        const timerControlFlag = isAgentActuallyThinking || false;
 
-                                                        // Render ReasoningView if there's dedicated reasoning, extracted think content, or if the agent is actively thinking.
-                                                        if (finalReasoningForView || isActiveAgent) {
+                                                        // Render ReasoningView if there's dedicated reasoning, extracted think content, or if the agent is actively thinking (for timer).
+                                                        if (finalReasoningForView || timerControlFlag) {
                                                             return (
                                                                 <ReasoningView
                                                                     key={`consolidated-reasoning-${group.key}`}
                                                                     content={finalReasoningForView}
-                                                                    isStreamingAgentActive={isActiveAgent}
+                                                                    isStreamingAgentActive={timerControlFlag}
                                                                 />
                                                             );
                                                         }
@@ -716,32 +719,39 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
 
                                                                         const rawStreamingText = streamingTextContent || '';
                                                                         // Since <think> tags are handled by the consolidated ReasoningView,
-                                                                        // we strip them here before passing to Markdown for the main assistant speech.
-                                                                        const strippedStreamingText = rawStreamingText.replace(/<think>((?:.|\n)*?)<\/think>/gi, '');
+                                                                        let speechOutput = rawStreamingText;
+                                                                        // Step 1: Remove complete <think> blocks
+                                                                        speechOutput = speechOutput.replace(/<think>((?:.|\n)*?)<\/think>/gi, '');
+                                                                        // Step 2: Handle/truncate before any unclosed <think> tag
+                                                                        const unclosedThinkIndex = speechOutput.indexOf('<think>');
+                                                                        if (unclosedThinkIndex !== -1) {
+                                                                          speechOutput = speechOutput.substring(0, unclosedThinkIndex);
+                                                                        }
 
-                                                                        // Corrected: Re-assign to existing variables, do not re-declare
-                                                                        detectedTag = null;
-                                                                        tagStartIndex = -1;
-                                                                        if (strippedStreamingText) { // Check on stripped content
-                                                                            const functionCallsIndex = strippedStreamingText.indexOf('<function_calls>');
+                                                                        // Step 3: Process the resulting speechOutput for other XML tags (tool calls, etc.)
+                                                                        let detectedToolTagForSpeech: string | null = null;
+                                                                        let toolTagStartIndexForSpeech = -1;
+
+                                                                        if (speechOutput) {
+                                                                            const functionCallsIndex = speechOutput.indexOf('<function_calls>');
                                                                             if (functionCallsIndex !== -1) {
-                                                                                detectedTag = 'function_calls';
-                                                                                tagStartIndex = functionCallsIndex;
+                                                                                detectedToolTagForSpeech = 'function_calls';
+                                                                                toolTagStartIndexForSpeech = functionCallsIndex;
                                                                             } else {
                                                                                 for (const tag of HIDE_STREAMING_XML_TAGS) {
                                                                                     const openingTagPattern = `<${tag}`;
-                                                                                    const index = strippedStreamingText.indexOf(openingTagPattern);
+                                                                                    const index = speechOutput.indexOf(openingTagPattern);
                                                                                     if (index !== -1) {
-                                                                                        detectedTag = tag;
-                                                                                        tagStartIndex = index;
+                                                                                        detectedToolTagForSpeech = tag;
+                                                                                        toolTagStartIndexForSpeech = index;
                                                                                         break;
                                                                                     }
                                                                                 }
                                                                             }
                                                                         }
 
-                                                                        const textToRenderForSpeech = detectedTag ? strippedStreamingText.substring(0, tagStartIndex) : strippedStreamingText;
-                                                                        const showCursor = (streamHookStatus === 'streaming' || streamHookStatus === 'connecting') && !detectedTag && textToRenderForSpeech; // Only show cursor if there's text or about to be text
+                                                                        const textToRenderForSpeech = detectedToolTagForSpeech ? speechOutput.substring(0, toolTagStartIndexForSpeech) : speechOutput;
+                                                                        const showCursor = (streamHookStatus === 'streaming' || streamHookStatus === 'connecting') && !detectedToolTagForSpeech && !!textToRenderForSpeech;
 
                                                                         return (
                                                                             <>
@@ -753,8 +763,8 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                                                 {showCursor && (
                                                                                     <span className="inline-block h-4 w-0.5 bg-primary ml-0.5 -mb-1 animate-pulse" />
                                                                                 )}
-                                                                                {/* XML Tag/Tool usage indicators remain the same */}
-                                                                                {detectedTag && detectedTag !== 'function_calls' && (
+                                                                                {/* XML Tag/Tool usage indicators use detectedToolTagForSpeech */}
+                                                                                {detectedToolTagForSpeech && detectedToolTagForSpeech !== 'function_calls' && (
                                                                                     <div className="mt-2 mb-1">
                                                                                         <button
                                                                                             className="animate-shimmer inline-flex items-center gap-1.5 py-1 px-1 text-xs font-medium text-primary bg-muted hover:bg-muted/80 rounded-md transition-colors cursor-pointer border border-primary/20"
@@ -835,39 +845,45 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                                         }
 
                                                                         const rawPlaybackStreamingText = streamingText || '';
-                                                                        // Strip <think> tags for playback mode assistant speech as well
-                                                                        const strippedPlaybackStreamingText = rawPlaybackStreamingText.replace(/<think>((?:.|\n)*?)<\/think>/gi, '');
+                                                                        let playbackSpeechOutput = rawPlaybackStreamingText;
+                                                                        // Step 1: Remove complete <think> blocks
+                                                                        playbackSpeechOutput = playbackSpeechOutput.replace(/<think>((?:.|\n)*?)<\/think>/gi, '');
+                                                                        // Step 2: Handle/truncate before any unclosed <think> tag
+                                                                        const unclosedThinkIndexPlayback = playbackSpeechOutput.indexOf('<think>');
+                                                                        if (unclosedThinkIndexPlayback !== -1) {
+                                                                          playbackSpeechOutput = playbackSpeechOutput.substring(0, unclosedThinkIndexPlayback);
+                                                                        }
 
-                                                                        // Corrected: Re-assign to existing variables, do not re-declare
-                                                                        detectedTag = null;
-                                                                        tagStartIndex = -1;
-                                                                        if (strippedPlaybackStreamingText) { // Check on stripped content
-                                                                            const functionCallsIndex = strippedPlaybackStreamingText.indexOf('<function_calls>');
+                                                                        // Step 3: Process for other XML tags
+                                                                        let detectedToolTagForPlayback: string | null = null;
+                                                                        let toolTagStartIndexForPlayback = -1;
+                                                                        if (playbackSpeechOutput) {
+                                                                            const functionCallsIndex = playbackSpeechOutput.indexOf('<function_calls>');
                                                                             if (functionCallsIndex !== -1) {
-                                                                                detectedTag = 'function_calls';
-                                                                                tagStartIndex = functionCallsIndex;
+                                                                                detectedToolTagForPlayback = 'function_calls';
+                                                                                toolTagStartIndexForPlayback = functionCallsIndex;
                                                                             } else {
                                                                                 for (const tag of HIDE_STREAMING_XML_TAGS) {
                                                                                     const openingTagPattern = `<${tag}`;
-                                                                                    const index = strippedPlaybackStreamingText.indexOf(openingTagPattern);
+                                                                                    const index = playbackSpeechOutput.indexOf(openingTagPattern);
                                                                                     if (index !== -1) {
-                                                                                        detectedTag = tag;
-                                                                                        tagStartIndex = index;
+                                                                                        detectedToolTagForPlayback = tag;
+                                                                                        toolTagStartIndexForPlayback = index;
                                                                                         break;
                                                                                     }
                                                                                 }
                                                                             }
                                                                         }
 
-                                                                        const textToRenderForPlaybackSpeech = detectedTag ? strippedPlaybackStreamingText.substring(0, tagStartIndex) : strippedPlaybackStreamingText;
-                                                                        const showCursor = isStreamingText && !detectedTag && textToRenderForPlaybackSpeech;
+                                                                        const textToRenderForPlaybackSpeech = detectedToolTagForPlayback ? playbackSpeechOutput.substring(0, toolTagStartIndexForPlayback) : playbackSpeechOutput;
+                                                                        const showCursor = isStreamingText && !detectedToolTagForPlayback && !!textToRenderForPlaybackSpeech;
 
                                                                         return (
                                                                             <>
                                                                                 {/* In debug mode, show raw streaming content */}
                                                                                 {debugMode && streamingText ? (
                                                                                     <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-auto p-2 border border-border rounded-md bg-muted/30">
-                                                                                        {strippedPlaybackStreamingText}
+                                                                                        {playbackSpeechOutput}
                                                                                     </pre>
                                                                                 ) : (
                                                                                     <>
@@ -877,8 +893,8 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                                                         {showCursor && (
                                                                                             <span className="inline-block h-4 w-0.5 bg-primary ml-0.5 -mb-1 animate-pulse" />
                                                                                         )}
-                                                                                        {/* XML Tag/Tool usage indicators remain the same */}
-                                                                                        {detectedTag && (
+                                                                                        {/* XML Tag/Tool usage indicators use detectedToolTagForPlayback */}
+                                                                                        {detectedToolTagForPlayback && (
                                                                                             <div className="mt-2 mb-1">
                                                                                                 <button
                                                                                                     className="animate-shimmer inline-flex items-center gap-1.5 py-1 px-2.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-md transition-colors cursor-pointer border border-primary/20"

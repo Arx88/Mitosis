@@ -227,6 +227,7 @@ export default function ThreadPage({
     toolCall: streamingToolCall,
     // `reasoning` holds the dedicated thought/reasoning process content from the agent stream.
     reasoning,
+    isThinkingInProgress, // New: Destructure isThinkingInProgress
     error: streamError,
     agentRunId: currentHookRunId,
     startStreaming,
@@ -619,6 +620,7 @@ export default function ThreadPage({
           agentAvatar={agent && agent.avatar}
           // Pass the dedicated reasoning content to ThreadContent.
           reasoning={reasoning}
+          isAgentActuallyThinking={isThinkingInProgress} // New: Pass down the thinking status
         />
 
         <div
