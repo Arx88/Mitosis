@@ -1,5 +1,5 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect } from 'react';
+import { motion, useAnimation } from 'framer-motion';
 import { ToolViewProps } from '../types';
 import { formatTimestamp, getToolTitle } from '../utils';
 import { getToolIcon } from '../../utils';
@@ -41,26 +41,55 @@ export function ToolViewWrapper({
   const toolTitle = getToolTitle(name);
   const Icon = getToolIcon(name);
   const MotionDiv = motion.div;
+  const flashOverlayControls = useAnimation();
+
+  useEffect(() => {
+    if (!isStreaming && showStatus) {
+      const flashColor = isSuccess
+        ? 'rgba(52, 211, 153, 1)' // emerald-500 (success)
+        : 'rgba(239, 68, 68, 1)'; // red-500 (failure)
+
+      flashOverlayControls.start({
+        opacity: [0, 0.3, 0],
+        backgroundColor: [flashColor, flashColor, flashColor], // Ensure color is present during visible phase
+        transition: { duration: 0.7, times: [0, 0.15, 1] } // Quick flash, then fade
+      });
+    }
+  }, [isSuccess, isStreaming, showStatus, flashOverlayControls]);
 
   return (
     <MotionDiv
-      className={cn("flex flex-col h-full", className)}
+      className={cn("flex flex-col h-full shadow-lg rounded-md", className)}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
     >
       {(headerContent || showStatus) && (
         <div className={cn(
-          "flex items-center p-2 bg-gradient-to-r from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 justify-between border-zinc-200 dark:border-zinc-800",
+          "relative flex items-center p-2 bg-gradient-to-r from-sky-100 to-sky-200 dark:from-sky-700 dark:to-sky-900 justify-between border-zinc-200 dark:border-zinc-800",
           headerClassName
         )}>
-          <div className="flex ml-1 items-center">
-            {Icon && <Icon className="h-4 w-4 mr-2 text-zinc-600 dark:text-zinc-400" />}
-            <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+          <MotionDiv
+            className="absolute inset-0 pointer-events-none"
+            style={{ zIndex: 0 }} // Ensure it's behind content if needed, or zIndex: 1 for above
+            animate={flashOverlayControls}
+          />
+          <div className="flex ml-1 items-center" style={{ zIndex: 1 }}> {/* Ensure content is above overlay */}
+            {Icon && (
+              <MotionDiv
+                whileHover={{ scale: 1.2, rotate: 5 }}
+                transition={{ type: 'spring', stiffness: 300 }}
+              >
+                <Icon className="h-4 w-4 mr-2 text-zinc-600 dark:text-zinc-400" />
+              </MotionDiv>
+            )}
+            <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
               {toolTitle}
             </span>
           </div>
-          {headerContent}
+          <div style={{ zIndex: 1 }}> {/* Ensure header content is above overlay */}
+            {headerContent}
+          </div>
         </div>
       )}
 
@@ -70,7 +99,7 @@ export function ToolViewWrapper({
 
       {(footerContent || showStatus) && (
         <div className={cn(
-          "p-4 border-t border-zinc-200 dark:border-zinc-800 bg-gradient-to-r from-zinc-50 to-zinc-100 dark:from-zinc-800 dark:to-zinc-900",
+          "p-4 border-t border-zinc-200 dark:border-zinc-800 bg-gradient-to-r from-neutral-100 to-neutral-200 dark:from-neutral-700 dark:to-neutral-900",
           footerClassName
         )}>
           <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
