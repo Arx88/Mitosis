@@ -151,6 +151,7 @@ export function useAgentStream(
       if (!isMountedRef.current) return;
 
       setIsThinkingInProgress(false); // Ensure thinking stops on any finalization
+      console.log(`[TIMER_DEBUG] useAgentStream.finalizeStream - Set isThinkingInProgress: false due to finalization status:`, finalStatus);
 
       const currentThreadId = threadIdRef.current; // Get current threadId from ref
       const currentSetMessages = setMessagesRef.current; // Get current setMessages from ref
@@ -310,9 +311,10 @@ export function useAgentStream(
           // to display the agent's thought process separately.
           // Accumulate reasoning content.
           const newReasoningChunk = parsedContent.content;
-          setReasoning(prevReasoning =>
-            (prevReasoning ? prevReasoning + '\n' : '') + newReasoningChunk
-          );
+          setReasoning(prevReasoning => {
+            console.log(`[REASONING_DEBUG] useAgentStream - PrevReasoning:`, prevReasoning, `NewChunk:`, newReasoningChunk); // Add this log
+            return (prevReasoning ? prevReasoning + '\n' : '') + newReasoningChunk;
+          });
           setIsThinkingInProgress(true); // Ensure thinking is marked as started when reasoning is received
           break;
         case 'assistant':
@@ -346,6 +348,7 @@ export function useAgentStream(
         case 'status':
           switch (parsedContent.status_type) {
             case 'thinking_completed': // New: Handle backend signal for thinking completion
+              console.log(`[TIMER_DEBUG] useAgentStream.handleStreamMessage - Received 'thinking_completed'. Setting isThinkingInProgress: false`);
               setIsThinkingInProgress(false);
               break;
             case 'tool_started':
@@ -551,6 +554,7 @@ export function useAgentStream(
   const startStreaming = useCallback(
     async (runId: string) => {
       if (!isMountedRef.current) return;
+      console.log(`[TIMER_DEBUG] useAgentStream.startStreaming - Called for runId:`, runId);
       console.log(
         `[useAgentStream] Received request to start streaming for ${runId}`,
       );
@@ -593,6 +597,7 @@ export function useAgentStream(
         }
 
         setIsThinkingInProgress(true); // Agent is confirmed running, start thinking timer
+        console.log(`[TIMER_DEBUG] useAgentStream.startStreaming - Set isThinkingInProgress: true`);
 
         // Agent is running, proceed to create the stream
         console.log(

@@ -11,15 +11,21 @@ interface ReasoningViewProps {
 }
 
 export const ReasoningView: React.FC<ReasoningViewProps> = ({ content, isStreamingAgentActive }) => {
+  console.log(`[TIMER_DEBUG] ReasoningView - Received props.isStreamingAgentActive:`, isStreamingAgentActive);
   const formattedTime = useThinkingTimer(isStreamingAgentActive || false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [displayedThoughts, setDisplayedThoughts] = useState<string[]>([]);
 
+  // console.log(`[REASONING_DEBUG] ReasoningView - Props:`, { content, isStreamingAgentActive });
   useEffect(() => {
+    console.log(`[REASONING_DEBUG] ReasoningView - Received content prop:`, content); // Add this log
     if (content && content.trim() !== '') {
-      setDisplayedThoughts(content.split('\n'));
+      const thoughts = content.split('\n');
+      setDisplayedThoughts(thoughts);
+      console.log(`[REASONING_DEBUG] ReasoningView - Set displayedThoughts:`, thoughts); // Add this log
     } else {
-      setDisplayedThoughts([]); // Clear if content is empty
+      setDisplayedThoughts([]);
+      console.log(`[REASONING_DEBUG] ReasoningView - Cleared displayedThoughts`); // Add this log
     }
   }, [content]);
 
@@ -43,7 +49,7 @@ export const ReasoningView: React.FC<ReasoningViewProps> = ({ content, isStreami
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center">
           <span className="mr-2 thinking-icon">⚙️</span> {/* Existing animated icon */}
-          <span className="font-semibold">Pensamiento del Agente</span>
+          <span className="font-semibold">Agent Thoughts</span>
           {isStreamingAgentActive && (
             <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
               (Thinking for {formattedTime})
