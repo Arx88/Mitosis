@@ -308,7 +308,11 @@ export function useAgentStream(
           // Handles messages specifically of type 'reasoning'.
           // This updates the `reasoning` state, which is then used by UI components
           // to display the agent's thought process separately.
-          setReasoning(parsedContent.content); // Assuming content is directly the reasoning string
+          // Accumulate reasoning content.
+          const newReasoningChunk = parsedContent.content;
+          setReasoning(prevReasoning =>
+            (prevReasoning ? prevReasoning + '\n' : '') + newReasoningChunk
+          );
           setIsThinkingInProgress(true); // Ensure thinking is marked as started when reasoning is received
           break;
         case 'assistant':
@@ -552,6 +556,7 @@ export function useAgentStream(
       );
 
       setIsThinkingInProgress(false); // Reset from any previous run
+      setReasoning(null); // Reset reasoning state for the new stream
 
       // Clean up any previous stream
       if (streamCleanupRef.current) {

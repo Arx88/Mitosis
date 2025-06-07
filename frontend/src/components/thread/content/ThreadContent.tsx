@@ -19,12 +19,16 @@ import { ReasoningView } from '@/components/thread/ReasoningView';
 import { parseXmlToolCalls, isNewXmlFormat, extractToolNameFromStream } from '@/components/thread/tool-views/xml-parser';
 import { parseToolResult } from '@/components/thread/tool-views/tool-result-parser';
 
-// Helper function to extract content from the first <think> tag
-const extractFirstThinkContent = (rawContent: string | null | undefined): string | null => {
+// Helper function to extract all <think> tag contents and join them
+const extractAllThinkContent = (rawContent: string | null | undefined): string | null => {
   if (!rawContent) return null;
-  // Regex to capture content within <think>...</think> tags, including newlines
-  const match = rawContent.match(/<think>((?:.|\n)*?)<\/think>/i);
-  return match ? match[1] : null;
+  const matches = [];
+  const regex = /<think>((?:.|\n)*?)<\/think>/gi; // g flag for global search
+  let match;
+  while ((match = regex.exec(rawContent)) !== null) {
+    matches.push(match[1]); // match[1] is the content inside the tags
+  }
+  return matches.length > 0 ? matches.join('\n') : null;
 };
 
 // Define the set of tags whose raw XML should be hidden during streaming
@@ -586,7 +590,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                             }
                                                         }
 
-                                                        const thinkTagContent = extractFirstThinkContent(contentForThinkExtraction);
+                                                        const thinkTagContent = extractAllThinkContent(contentForThinkExtraction); // Use new helper
                                                         const finalReasoningForView = reasoning || thinkTagContent;
                                                         // Use isAgentActuallyThinking for timer control, default to false if undefined
                                                         const timerControlFlag = isAgentActuallyThinking || false;
