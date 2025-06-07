@@ -88,6 +88,7 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
     const [pendingFiles, setPendingFiles] = useState<File[]>([]);
     const [isUploading, setIsUploading] = useState(false);
     const [isDraggingOver, setIsDraggingOver] = useState(false);
+    const [isInputFocused, setIsInputFocused] = useState(false);
     const cardControls = useAnimation();
     const MotionDiv = motion.div;
 
@@ -117,6 +118,14 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
         textareaRef.current.focus();
       }
     }, [autoFocus]);
+
+    useEffect(() => {
+      if (isDraggingOver) {
+        cardControls.start({ scale: 1.03, transition: { duration: 0.2 } });
+      } else {
+        cardControls.start({ scale: 1, transition: { duration: 0.2 } });
+      }
+    }, [isDraggingOver, cardControls]);
 
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -158,7 +167,11 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
       }
 
       setUploadedFiles([]);
-      cardControls.start({ scale: [1, 1.02, 1], transition: { duration: 0.3 } });
+      cardControls.start({
+        scale: [1, 1.04, 1],
+        filter: ['brightness(100%)', 'brightness(105%)', 'brightness(100%)'],
+        transition: { type: 'spring', stiffness: 400, damping: 10, duration: 0.2 }
+      });
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -227,7 +240,7 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
     return (
       <div className="mx-auto w-full max-w-4xl">
         <Card
-          className="shadow-none w-full max-w-4xl mx-auto bg-transparent border-none rounded-xl overflow-hidden"
+          className="w-full max-w-4xl mx-auto bg-transparent border-none rounded-xl overflow-hidden shadow-xl"
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={(e) => {
@@ -252,13 +265,15 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
           <MotionDiv className="w-full text-sm flex flex-col justify-between items-start rounded-lg" animate={cardControls}>
             <CardContent className={cn(
               "w-full p-1.5 pb-2 rounded-2xl",
-              "bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-700 dark:to-zinc-800",
+              "bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-slate-600 dark:to-slate-700",
               isDraggingOver
-                ? 'border-sky-500 border-2 ring-2 ring-sky-500/50'
-                : 'border border-neutral-200 dark:border-neutral-700'
+                ? 'border-2 border-dashed border-sky-500 ring-4 ring-sky-500/30'
+                : isInputFocused
+                  ? 'border-primary ring-2 ring-primary/30'
+                  : 'border border-neutral-200 dark:border-neutral-700'
             )}>
-              {onAgentSelect && (                
-                <div className="mb-2 px-2">                  
+              {onAgentSelect && (
+                <div className="mb-2 px-2">
                 <AgentSelector                    
                 selectedAgentId={selectedAgentId}                    
                 onAgentSelect={onAgentSelect}                    
@@ -282,6 +297,8 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
                 onChange={handleChange}
                 onSubmit={handleSubmit}
                 onTranscription={handleTranscription}
+                onFocus={() => setIsInputFocused(true)}
+                onBlur={() => setIsInputFocused(false)}
                 placeholder={placeholder}
                 loading={loading}
                 disabled={disabled}
@@ -323,7 +340,7 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
                     key={i}
                     className="h-1.5 w-1.5 bg-current rounded-full"
                     initial={{ opacity: 0.5 }}
-                    animate={{ opacity: [0.5, 1, 0.5] }}
+                    animate={{ opacity: [0.5, 1, 0.5], y: [0, -2, 0] }}
                     transition={{
                       duration: 1,
                       repeat: Infinity,
