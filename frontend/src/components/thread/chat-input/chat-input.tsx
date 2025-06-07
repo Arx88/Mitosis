@@ -349,7 +349,7 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
                   />
                 ))}
               </div>
-              <span>{agentName ? `${agentName} is working...` : 'Suna is working...'}</span>
+              <span className="text-sm">{agentName ? `${agentName} is working...` : 'Suna is working...'}</span>
             </div>
           </MotionDiv>
         )}

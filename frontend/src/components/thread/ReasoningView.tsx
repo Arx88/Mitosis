@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion'; // Added
-import { ChevronDown } from 'lucide-react'; // Added
+import { motion, useAnimation } from 'framer-motion'; // Added useAnimation
+import { ChevronDown } from 'lucide-react';
 import { useThinkingTimer } from '@/hooks/useThinkingTimer';
 
 interface ReasoningViewProps {
@@ -8,9 +8,35 @@ interface ReasoningViewProps {
   isStreamingAgentActive?: boolean;
 }
 
+const standardShadow = '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1)'; // Tailwind's shadow-md
+
+const animationVariants = {
+  hidden: { opacity: 0, y: 20, boxShadow: standardShadow },
+  visibleInactive: {
+    opacity: 1,
+    y: 0,
+    boxShadow: standardShadow,
+    transition: { duration: 0.4, ease: "easeOut" }
+  },
+  visibleActive: {
+    opacity: 1,
+    y: 0,
+    boxShadow: [
+      standardShadow + ", 0 0 0px 0px rgba(59, 130, 246, 0)",    // blue-500 with 0 opacity
+      standardShadow + ", 0 0 15px 3px rgba(59, 130, 246, 0.6)", // blue-500 with 0.6 opacity
+      standardShadow + ", 0 0 0px 0px rgba(59, 130, 246, 0)"     // blue-500 with 0 opacity
+    ],
+    transition: {
+      default: { duration: 0.4, ease: "easeOut" }, // For opacity/y if they change
+      boxShadow: { duration: 1.5, repeat: Infinity, ease: "easeInOut", delay: 0.4 }
+    }
+  }
+};
+
 export const ReasoningView: React.FC<ReasoningViewProps> = ({ content, isStreamingAgentActive }) => {
-  const MotionDiv = motion.div; // Added
-  const MotionButton = motion.button; // Added
+  const MotionDiv = motion.div;
+  const MotionButton = motion.button;
+  const controls = useAnimation(); // Added
 
   console.log(`[TIMER_DEBUG] ReasoningView - Received props.isStreamingAgentActive:`, isStreamingAgentActive);
   const formattedTime = useThinkingTimer(isStreamingAgentActive || false);
@@ -29,23 +55,37 @@ export const ReasoningView: React.FC<ReasoningViewProps> = ({ content, isStreami
     }
   }, [content]);
 
+  useEffect(() => {
+    if (isStreamingAgentActive) {
+      controls.start("visibleActive");
+    } else {
+      // On initial load if not streaming, or when streaming stops
+      controls.start("visibleInactive");
+    }
+  }, [isStreamingAgentActive, controls]);
+
+
   if (!isStreamingAgentActive && (!content || content.trim() === '')) {
+    // If not actively thinking AND there's no persistent content, don't render.
+    // This ensures that if content clears after streaming, the component disappears
+    // rather than just going to inactive (unless it has persistent content).
+    // The 'hidden' initial state of variants handles the very first appearance.
     return null;
   }
 
   const contentAreaStyle = {
     overflow: 'hidden',
-    maxHeight: isExpanded ? 'none' : '5em', // Keep existing max-height logic for collapse
-    transition: 'max-height 0.3s ease-in-out', // Keep existing transition
+    maxHeight: isExpanded ? 'none' : '5em',
+    transition: 'max-height 0.3s ease-in-out',
     minHeight: (displayedThoughts.length === 0 && isStreamingAgentActive) ? '4em' : 'auto'
   };
 
   return (
     <MotionDiv
-      className="reasoning-view-container bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-800 p-4 rounded-lg text-sm shadow-md" // Added shadow, changed bg
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
+      className="reasoning-view-container bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-800 p-4 rounded-lg text-sm" // Removed shadow-md
+      initial="hidden"
+      animate={controls}
+      variants={animationVariants}
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
@@ -53,15 +93,15 @@ export const ReasoningView: React.FC<ReasoningViewProps> = ({ content, isStreami
           <span className="mr-2 thinking-icon">⚙️</span>
           <span className="font-semibold">Agent Thoughts</span>
           {isStreamingAgentActive && (
-            <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+            <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
               (Thinking for {formattedTime})
             </span>
           )}
         </div>
         {displayedThoughts.length > 0 && (
-           <MotionButton // Changed to MotionButton
+           <MotionButton
             onClick={() => setIsExpanded(!isExpanded)}
-            className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 focus:outline-none" // Added flex, gap; updated hover
+            className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 focus:outline-none" // Changed text-xs to text-sm
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
@@ -77,7 +117,7 @@ export const ReasoningView: React.FC<ReasoningViewProps> = ({ content, isStreami
       {(isStreamingAgentActive || (content && content.trim() !== '')) && (
         <div
           className="thoughts-content-area mt-2 border-t pt-2 border-slate-200 dark:border-slate-700"
-          style={contentAreaStyle} // Keep using style for max-height animation
+          style={contentAreaStyle}
         >
           {displayedThoughts.length > 0 ? (
             <div className="thoughts-list-container">
@@ -88,8 +128,8 @@ export const ReasoningView: React.FC<ReasoningViewProps> = ({ content, isStreami
               ))}
             </div>
           ) : (
-            isStreamingAgentActive && ( // Only show "Thinking..." if agent is active and no thoughts yet
-              <div className="flex items-center justify-center py-2"> {/* Centering container */}
+            isStreamingAgentActive && (
+              <div className="flex items-center justify-center py-2">
                 <div className="flex space-x-1">
                   {[0, 1, 2].map((i) => (
                     <MotionDiv
