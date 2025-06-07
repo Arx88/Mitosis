@@ -217,10 +217,12 @@ function MarkdownComponent({
         }
 
         // It's not a thought placeholder, render a normal paragraph or user-defined component
-        if (propComponents?.p && typeof propComponents.p === 'function') {
-          return propComponents.p({ node, children: pChildren, ...props });
+        if (propComponents?.p && typeof propComponents.p !== 'string') {
+          // propComponents.p is a custom component (function or class)
+          const UserP = propComponents.p;
+          return <UserP node={node} {...props}>{pChildren}</UserP>;
         }
-        // If propComponents.p is not a function (e.g., undefined or a string like "p"),
+        // If propComponents.p is undefined or a string (like "p"),
         // render a standard HTML paragraph.
         return <p {...props}>{pChildren}</p>;
       },
