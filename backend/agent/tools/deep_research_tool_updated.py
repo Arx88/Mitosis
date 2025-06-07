@@ -54,6 +54,9 @@ class DeepResearchToolUpdatedOutput(BaseModel):
     # Description: The number of sources analyzed during the research.
     sources_analyzed: int
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
     class Config:
         extra = "forbid"
 
