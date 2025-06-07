@@ -212,7 +212,7 @@ function MarkdownComponent({
         // Ensure pChildren is a flat string if it's a simple text node,
         // ReactMarkdown might pass an array with one string.
         const childTextNode = Array.isArray(pChildren) ? pChildren[0] : pChildren;
-        const potentialId = typeof childTextNode === 'string' ? childTextNode : '';
+        const potentialId = typeof childTextNode === 'string' ? childTextNode.trim() : '';
 
         const thought = extractedThoughts.find(t => t.id === potentialId);
         if (thought) {
