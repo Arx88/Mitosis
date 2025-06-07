@@ -719,8 +719,9 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                                         // we strip them here before passing to Markdown for the main assistant speech.
                                                                         const strippedStreamingText = rawStreamingText.replace(/<think>((?:.|\n)*?)<\/think>/gi, '');
 
-                                                                        let detectedTag: string | null = null;
-                                                                        let tagStartIndex = -1;
+                                                                        // Corrected: Re-assign to existing variables, do not re-declare
+                                                                        detectedTag = null;
+                                                                        tagStartIndex = -1;
                                                                         if (strippedStreamingText) { // Check on stripped content
                                                                             const functionCallsIndex = strippedStreamingText.indexOf('<function_calls>');
                                                                             if (functionCallsIndex !== -1) {
@@ -837,8 +838,9 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                                         // Strip <think> tags for playback mode assistant speech as well
                                                                         const strippedPlaybackStreamingText = rawPlaybackStreamingText.replace(/<think>((?:.|\n)*?)<\/think>/gi, '');
 
-                                                                        let detectedTag: string | null = null;
-                                                                        let tagStartIndex = -1;
+                                                                        // Corrected: Re-assign to existing variables, do not re-declare
+                                                                        detectedTag = null;
+                                                                        tagStartIndex = -1;
                                                                         if (strippedPlaybackStreamingText) { // Check on stripped content
                                                                             const functionCallsIndex = strippedPlaybackStreamingText.indexOf('<function_calls>');
                                                                             if (functionCallsIndex !== -1) {
