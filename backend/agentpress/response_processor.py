@@ -1185,21 +1185,28 @@ class ResponseProcessor:
                     return None
                 
                 # Take the first tool call (should only be one per chunk)
-                xml_tool_call = parsed_calls[0]
+                xml_tool_call = parsed_calls[0] # This is a ToolCall object
                 
-                # Convert to the expected format
-                tool_call = {
-                    "function_name": xml_tool_call.function_name,
-                    "xml_tag_name": xml_tool_call.function_name.replace('_', '-'),  # For backwards compatibility
-                    "arguments": xml_tool_call.parameters
+                tool_call_dict = { # Renamed to avoid confusion with the ToolCall object
+                    "function_name": xml_tool_call.tool_name,
+                    "xml_tag_name": xml_tool_call.tool_name.replace('_', '-'),
+                    "arguments": xml_tool_call.tool_kwargs
                 }
                 
-                # Include the parsing details
-                parsing_details = xml_tool_call.parsing_details
-                parsing_details["raw_xml"] = xml_tool_call.raw_xml
+                # Initialize parsing_details for this path.
+                # The new XMLToolParser doesn't return these on the ToolCall object itself.
+                # For this specific parsing path (invoke format), we can consider the raw_xml to be the input chunk.
+                # Other details like attributes/elements are not explicitly parsed by XMLToolParser into ToolCall's attributes.
+                parsing_details = {
+                    "attributes": {}, # Attributes of the <invoke> tag are not directly put here by current XMLToolParser logic for invoke
+                    "elements": {},   # Parameters are in arguments, not as separate elements here
+                    "text_content": None,
+                    "root_content": None, # The content of <invoke> are <parameter> tags
+                    "raw_xml": xml_chunk # The raw XML chunk that was parsed for this invoke call
+                }
                 
-                logger.debug(f"Parsed new format tool call: {tool_call}")
-                return tool_call, parsing_details
+                logger.debug(f"Parsed new format tool call: {tool_call_dict}")
+                return tool_call_dict, parsing_details
             
             # Fall back to old format parsing
             # Extract tag name and validate
