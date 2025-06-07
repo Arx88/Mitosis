@@ -23,6 +23,9 @@ const items = [
 
 export const AgentLoader = () => {
   const [index, setIndex] = useState(0);
+  const MotionSpan = motion.span;
+  const MotionDiv = motion.div;
+
   useEffect(() => {
     const id = setInterval(() => {
       setIndex((state) => {
@@ -35,20 +38,26 @@ export const AgentLoader = () => {
 
   return (
     <div className="flex py-2 items-center w-full">
-      <div>✨</div>
-            <AnimatePresence>
-            <motion.div
-                key={items[index].id}
-                initial={{ y: 20, opacity: 0, filter: "blur(8px)" }}
-                animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
-                exit={{ y: -20, opacity: 0, filter: "blur(8px)" }}
-                transition={{ ease: "easeInOut" }}
-                style={{ position: "absolute" }}
-                className='ml-7'
-            >
-                <AnimatedShinyText>{items[index].content}</AnimatedShinyText>
-            </motion.div>
-            </AnimatePresence>
-        </div>
+      <MotionSpan
+        animate={{ scale: [1, 1.2, 1, 1.2, 1], rotate: [0, 5, -5, 5, 0] }}
+        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        style={{ display: 'inline-block' }}
+      >
+        ✨
+      </MotionSpan>
+      <AnimatePresence>
+        <MotionDiv
+            key={items[index].id}
+            initial={{ y: 15, opacity: 0, scale: 0.95, filter: "blur(5px)" }}
+            animate={{ y: 0, opacity: 1, scale: 1, filter: "blur(0px)" }}
+            exit={{ y: -15, opacity: 0, scale: 0.95, filter: "blur(5px)" }}
+            transition={{ type: "spring", stiffness: 200, damping: 20 }}
+            style={{ position: "absolute" }}
+            className='ml-7'
+        >
+            <AnimatedShinyText>{items[index].content}</AnimatedShinyText>
+        </MotionDiv>
+      </AnimatePresence>
+    </div>
   );
 };
