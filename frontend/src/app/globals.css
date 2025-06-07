@@ -224,6 +224,26 @@
   }
 }
 
+/* ReasoningView styles */
+.reasoning-view-container {
+  border: 1px solid #ccc; /* Light mode border */
+}
+
+.dark .reasoning-view-container {
+  border: 1px solid #444; /* Dark mode border */
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.thinking-icon {
+  display: inline-block;
+  animation: spin 2s linear infinite;
+  /* margin-left is handled by mr-2 in the component */
+}
+
 :root {
   --background: oklch(98.46% 0.002 247.84);
   --foreground: oklch(0.145 0 0);
