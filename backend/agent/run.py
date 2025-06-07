@@ -275,6 +275,9 @@ async def run_agent(
                     for func_schema in tool_data['methods']:
                         func_name = func_schema.get('name', 'UnknownFunction')
                         func_description = func_schema.get('description', 'No function description.')
+                        # ADD LOGGING HERE
+                        if func_name == 'deep-search' or tool_class_name == 'DeepResearchToolUpdated':
+                            logger.info(f"DEBUG_PROMPT_GEN: For {tool_class_name}.{func_name}, schema being added to prompt: {func_schema}")
                         standard_tools_info += f"     - `{func_name}`: {func_description}\n"
 
                         params = func_schema.get('parameters', {}).get('properties', {})
