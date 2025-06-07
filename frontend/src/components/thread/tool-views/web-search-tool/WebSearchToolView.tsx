@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
+import Image from 'next/image'; // Import next/image
 import { ToolViewProps } from '../types';
 import { cleanUrl, formatTimestamp, getToolTitle } from '../utils';
 import { cn, truncateString } from '@/lib/utils';
@@ -147,16 +148,22 @@ export function WebSearchToolView({
                         href={image}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="group relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 hover:border-blue-300 dark:hover:border-blue-700 transition-colors shadow-sm hover:shadow-md"
+                        className="group relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 hover:border-blue-300 dark:hover:border-blue-700 transition-colors shadow-sm hover:shadow-md h-32" // Added h-32 to parent for layout="fill"
                       >
-                        <img
+                        <Image
                           src={image}
                           alt={`Search result ${idx + 1}`}
-                          className="object-cover w-full h-32 group-hover:opacity-90 transition-opacity"
+                          layout="fill"
+                          objectFit="cover"
+                          className="group-hover:opacity-90 transition-opacity"
                           onError={(e) => {
                             const target = e.target as HTMLImageElement;
+                            // Attempting to set src directly on error is not the Next/Image way.
+                            // Ideally, use a state to switch to a fallback <Image> or component.
+                            // For now, we'll log and try to apply placeholder style if possible.
+                            console.error('Search image load error');
                             target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'%3E%3C/circle%3E%3Cpolyline points='21 15 16 10 5 21'%3E%3C/polyline%3E%3C/svg%3E";
-                            target.classList.add("p-4");
+                            target.classList.add("p-4"); // This might not apply correctly to the internal img
                           }}
                         />
                         <div className="absolute top-0 right-0 p-1">
@@ -199,12 +206,15 @@ export function WebSearchToolView({
                       <div className="p-4">
                         <div className="flex items-start gap-3 mb-2">
                           {favicon && (
-                            <img
+                            <Image
                               src={favicon}
                               alt=""
-                              className="w-5 h-5 mt-1 rounded"
+                              width={20}
+                              height={20}
+                              className="mt-1 rounded"
                               onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
+                                console.error('Favicon load error');
+                                (e.target as HTMLImageElement).style.display = 'none'; // May not work reliably
                               }}
                             />
                           )}

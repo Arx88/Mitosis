@@ -79,12 +79,12 @@ export function ShareModal({ isOpen, onClose, threadId, projectId }: ShareModalP
     } else {
       setShareLink(null)
     }
-  }, [threadData])
+  }, [threadData, generateShareLink]);
 
-  const generateShareLink = () => {
+  const generateShareLink = useCallback(() => {
     if (!threadId) return ""
     return `${process.env.NEXT_PUBLIC_URL || window.location.origin}/share/${threadId}`
-  }
+  }, [threadId]);
 
   const createShareLink = async () => {
     if (!threadId) return

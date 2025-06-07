@@ -173,7 +173,7 @@ export const AgentBuilderChat = React.memo(function AgentBuilderChat({
         setAgentStatus('running');
         break;
     }
-  }, []);
+  }, [queryClient, agentId]);
 
   const handleStreamError = useCallback((errorMessage: string) => {
     if (!errorMessage.toLowerCase().includes('not found') && 

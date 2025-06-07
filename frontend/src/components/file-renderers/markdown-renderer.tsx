@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
+import Image from 'next/image'; // Import next/image
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { CodeRenderer } from './code-renderer';
@@ -102,11 +103,19 @@ export const MarkdownRenderer = forwardRef<
                 {...props}
               />
             ),
-            img: ({ node, ...props }) => (
-              <img
-                className="max-w-full h-auto rounded-md my-2"
-                {...props}
-                alt={props.alt || ''}
+            img: ({ node, ...props }) => ( // props will contain src, alt from markdown
+              <Image
+                // Spread other props from markdown if any (like style, etc.)
+                // However, NextImage has specific props, so filter or map carefully if needed.
+                // For now, only passing essential and compatible props.
+                src={props.src || "/placeholder.png"} // Provide a fallback src if necessary
+                alt={props.alt || ""}
+                width={Number(props.width) || 800}  // Use width from props if available, else default
+                height={Number(props.height) || 600} // Use height from props if available, else default
+                layout="intrinsic" // Intrinsic layout respects image dimensions, scales down with max-w-full
+                className="max-w-full h-auto rounded-md my-2" // Apply existing classes
+                // Add a comment that these are default aspect ratio values
+                // TODO: Ensure props.width and props.height are correctly passed if available from markdown ast node
               />
             ),
             pre: ({ node, ...props }) => (

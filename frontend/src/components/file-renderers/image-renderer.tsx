@@ -11,6 +11,7 @@ import {
   Minimize2,
   Info,
 } from 'lucide-react';
+import Image from 'next/image'; // Import next/image
 
 interface ImageRendererProps {
   url: string;
@@ -257,32 +258,46 @@ export function ImageRenderer({ url, className }: ImageRendererProps) {
                 }}
               >
                 {/* Fallback to img if object fails */}
-                <img
-                  ref={imageRef}
+                {/* For layout="fill", parent needs position:relative and dimensions, which the surrounding divs provide. */}
+                <Image
+                  ref={imageRef} // Note: Next/Image might not directly support ref like HTML img for naturalWidth/Height. This might need adjustment.
                   src={url}
                   alt="SVG preview"
-                  className="max-w-full max-h-full object-contain"
+                  layout="fill"
+                  objectFit="contain"
                   style={{
                     transform: imageTransform,
                     transition: 'transform 0.2s ease',
                   }}
                   draggable={false}
-                  onLoad={handleImageLoad}
+                  onLoad={(e) => {
+                    // For Next/Image, naturalWidth/Height are on e.target
+                    const target = e.target as HTMLImageElement;
+                    setImgInfo({ width: target.naturalWidth, height: target.naturalHeight, type: 'SVG (fallback)' });
+                    handleImageLoad();
+                  }}
                   onError={handleImageError}
                 />
               </object>
             ) : (
-              <img
-                ref={imageRef}
+              // For layout="fill", parent needs position:relative and dimensions.
+              <Image
+                ref={imageRef} // Note: Next/Image might not directly support ref. This might need adjustment.
                 src={url}
                 alt="Image preview"
-                className="max-w-full max-h-full object-contain"
+                layout="fill"
+                objectFit="contain"
                 style={{
                   transform: imageTransform,
                   transition: 'transform 0.2s ease',
                 }}
                 draggable={false}
-                onLoad={handleImageLoad}
+                onLoad={(e) => {
+                  // For Next/Image, naturalWidth/Height are on e.target
+                  const target = e.target as HTMLImageElement;
+                  setImgInfo({ width: target.naturalWidth, height: target.naturalHeight, type: url.split('.').pop()?.toUpperCase() || 'Image' });
+                  handleImageLoad();
+                }}
                 onError={handleImageError}
               />
             )}

@@ -23,11 +23,11 @@ function LegalContent() {
   const [isScrolling, setIsScrolling] = useState(false);
 
   // Function to update URL without refreshing the page
-  const updateUrl = (tab: string) => {
+  const updateUrl = useCallback((tab: string) => {
     const params = new URLSearchParams(searchParams);
     params.set('tab', tab);
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  };
+  }, [searchParams, router, pathname]);
 
   useEffect(() => {
     setMounted(true);

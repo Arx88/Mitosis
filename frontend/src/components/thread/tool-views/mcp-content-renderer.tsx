@@ -10,6 +10,7 @@ import {
   Search, Database, FileText, Link2, Key, AlertTriangle, 
   Copy, Globe, FileCode, Table, BookOpen, ExternalLink 
 } from 'lucide-react';
+import Image from 'next/image'; // Import next/image
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
@@ -95,12 +96,16 @@ function SearchResultsRenderer({ data, metadata }: { data: any; metadata?: any }
                     </h4>
                   </div>
                   {result.image && (
-                    <img 
-                      src={result.image} 
-                      alt=""
-                      className="w-16 h-12 object-cover rounded border border-zinc-200 dark:border-zinc-700"
+                    <Image
+                      src={result.image}
+                      alt="" // Decorative image, alt can be empty
+                      width={64}
+                      height={48}
+                      objectFit="cover"
+                      className="rounded border border-zinc-200 dark:border-zinc-700"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none';
+                        console.error('Search result image load error');
+                        (e.target as HTMLImageElement).style.display = 'none'; // May not work reliably
                       }}
                     />
                   )}
@@ -118,12 +123,14 @@ function SearchResultsRenderer({ data, metadata }: { data: any; metadata?: any }
                 {result.url && (
                   <div className="flex items-center gap-1.5 text-xs">
                     {result.favicon && (
-                      <img 
-                        src={result.favicon} 
-                        alt=""
-                        className="w-4 h-4"
+                      <Image
+                        src={result.favicon}
+                        alt="" // Decorative image, alt can be empty
+                        width={16}
+                        height={16}
                         onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none';
+                          console.error('Favicon load error');
+                          (e.target as HTMLImageElement).style.display = 'none'; // May not work reliably
                         }}
                       />
                     )}

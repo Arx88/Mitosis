@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { cn } from '@/lib/utils';
 // import { marked } from 'marked'; // Not needed anymore
 import { memo, useId, useMemo } from 'react';
@@ -216,15 +215,24 @@ function MarkdownComponent({
         if (thought) {
           return <ReasoningView content={thought.content} />;
         }
-        // Fallback to default paragraph rendering or user-provided 'p'
-        if (propComponents?.p) {
+
+        // It's not a thought placeholder, render a normal paragraph or user-defined component
+        if (propComponents?.p && typeof propComponents.p === 'function') {
           return propComponents.p({ node, children: pChildren, ...props });
         }
+        // If propComponents.p is not a function (e.g., undefined or a string like "p"),
+        // render a standard HTML paragraph.
         return <p {...props}>{pChildren}</p>;
       },
       // Potentially merge other propComponents here if needed
     };
-    return { ...componentsWithCustomP, ...propComponents };
+
+    // Corrected merge strategy:
+    // 1. Start with INITIAL_COMPONENTS.
+    // 2. Allow propComponents to override any of these.
+    // 3. Ensure our custom 'p' (from componentsWithCustomP.p) is used.
+    //    Our custom 'p' already handles deferring to propComponents.p if it's not a thought.
+    return { ...INITIAL_COMPONENTS, ...propComponents, p: componentsWithCustomP.p };
   }, [extractedThoughts, propComponents]);
 
   return (

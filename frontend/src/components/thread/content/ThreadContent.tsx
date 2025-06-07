@@ -577,7 +577,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                                     if (message.type === 'assistant') {
                                                                         const parsedContent = safeJsonParse<ParsedContent>(message.content, {});
                                                                         const msgKey = message.message_id || `submsg-assistant-${msgIndex}`;
-                                                                        let assistantMessageCount = 0; 
+                                                                        const assistantMessageCount = 0;
                                                                         
                                                                         if (!parsedContent.content) return;
 
