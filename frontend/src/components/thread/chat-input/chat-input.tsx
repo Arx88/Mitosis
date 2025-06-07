@@ -265,12 +265,12 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
           <MotionDiv className="w-full text-sm flex flex-col justify-between items-start rounded-lg" animate={cardControls}>
             <CardContent className={cn(
               "w-full p-1.5 pb-2 rounded-2xl",
-              "bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-slate-600 dark:to-slate-700",
+              "bg-card", // Changed from gradient to bg-card
               isDraggingOver
                 ? 'border-2 border-dashed border-sky-500 ring-4 ring-sky-500/30'
                 : isInputFocused
                   ? 'border-primary ring-2 ring-primary/30'
-                  : 'border border-neutral-200 dark:border-neutral-700'
+                  : 'border border-border' // Changed default border
             )}>
               {onAgentSelect && (
                 <div className="mb-2 px-2">

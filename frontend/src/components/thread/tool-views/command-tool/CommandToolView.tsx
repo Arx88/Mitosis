@@ -199,7 +199,7 @@ export function CommandToolView({
                       )}
                     </div>
                     <div className="p-4 max-h-96 overflow-auto scrollbar-hide">
-                      <pre className="text-xs text-zinc-600 dark:text-zinc-300 font-mono whitespace-pre-wrap break-all overflow-visible">
+                      <pre className="text-sm text-zinc-600 dark:text-zinc-300 font-mono whitespace-pre-wrap break-all overflow-visible"> {/* Changed text-xs to text-sm */}
                         {linesToShow.map((line, index) => (
                           <div
                             key={index} 
