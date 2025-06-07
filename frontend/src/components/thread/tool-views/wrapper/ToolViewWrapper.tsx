@@ -60,9 +60,9 @@ export function ToolViewWrapper({
   return (
     <MotionDiv
       className={cn("flex flex-col h-full shadow-lg rounded-md", className)}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
     >
       {(headerContent || showStatus) && (
         <div className={cn(
@@ -122,11 +122,17 @@ export function ToolViewWrapper({
                     <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
                   </motion.div>
                 )}
-                <span>
-                  {isSuccess
-                    ? customStatus?.success || "Completed successfully"
-                    : customStatus?.failure || "Execution failed"}
-                </span>
+                <MotionDiv
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.1, duration: 0.3 }}
+                >
+                  <span>
+                    {isSuccess
+                      ? customStatus?.success || "Completed successfully"
+                      : customStatus?.failure || "Execution failed"}
+                  </span>
+                </MotionDiv>
               </div>
             )}
 
