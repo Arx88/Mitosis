@@ -161,7 +161,6 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                     <div className="mx-auto max-w-3xl md:px-8 min-w-0">
                         <div className="space-y-8 min-w-0">
                             {(() => {
-                                type MessageGroup = { type: 'user' | 'assistant_group'; messages: UnifiedMessage[]; key: string; };
                                 type MessageGroup = { type: 'user' | 'assistant_group' | 'error_group'; messages: UnifiedMessage[]; key: string; };
                                 const groupedMessages: MessageGroup[] = [];
                                 let currentGroup: MessageGroup | null = null;
