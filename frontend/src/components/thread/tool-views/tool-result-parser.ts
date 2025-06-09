@@ -87,11 +87,21 @@ function parseObjectToolResult(content: any): ParsedToolResult | null {
     const xmlTagName = toolExecution.xml_tag_name || '';
     const toolName = (xmlTagName || functionName).replace(/_/g, '-');
 
+    let determinedOutput = '';
+    const resultObj = toolExecution.result;
+    if (resultObj) {
+        if (typeof resultObj.output === 'string' && resultObj.output.trim() !== '') {
+            determinedOutput = resultObj.output;
+        } else if (typeof resultObj === 'string' && resultObj.trim() !== '') {
+            determinedOutput = resultObj;
+        }
+    }
+
     return {
       toolName,
       functionName,
       xmlTagName: xmlTagName || undefined,
-      toolOutput: toolExecution.result?.output || '',
+      toolOutput: determinedOutput,
       isSuccess: toolExecution.result?.success !== false,
       arguments: toolExecution.arguments,
       timestamp: toolExecution.execution_details?.timestamp,
@@ -112,29 +122,92 @@ function parseObjectToolResult(content: any): ParsedToolResult | null {
     // Legacy format with tool_name/xml_tag_name
     if ('tool_name' in nestedContent || 'xml_tag_name' in nestedContent) {
       const toolName = (nestedContent.tool_name || nestedContent.xml_tag_name || 'unknown').replace(/_/g, '-');
+      const toolName = (nestedContent.tool_name || nestedContent.xml_tag_name || 'unknown').replace(/_/g, '-');
+
+      let nestedDeterminedOutput = '';
+      if (nestedContent.result) {
+          if (typeof nestedContent.result.output === 'string' && nestedContent.result.output.trim() !== '') {
+              nestedDeterminedOutput = nestedContent.result.output;
+          } else if (typeof nestedContent.result === 'string' && nestedContent.result.trim() !== '') {
+              nestedDeterminedOutput = nestedContent.result;
+          }
+      } else if (typeof nestedContent.output === 'string' && nestedContent.output.trim() !== '') {
+          nestedDeterminedOutput = nestedContent.output;
+      }
+
       return {
         toolName,
         functionName: toolName.replace(/-/g, '_'),
-        toolOutput: nestedContent.result?.output || '',
-        isSuccess: nestedContent.result?.success !== false,
+        toolOutput: nestedDeterminedOutput,
+        isSuccess: nestedContent.result?.success !== false, // isSuccess logic might also need refinement if result object structure varies
       };
     }
   }
 
   // Handle nested format with role and string content
   if ('role' in content && 'content' in content && typeof content.content === 'string') {
-    return parseStringToolResult(content.content);
+    // This path typically means the content itself is the output, or needs further parsing as a string
+    const stringResult = parseStringToolResult(content.content);
+    if (stringResult) return stringResult; // Return as is, parseStringToolResult handles its own output format
   }
 
   // Legacy direct format
   if ('tool_name' in content || 'xml_tag_name' in content) {
     const toolName = (content.tool_name || content.xml_tag_name || 'unknown').replace(/_/g, '-');
+
+    let legacyDeterminedOutput = '';
+    if (content.result) {
+        if (typeof content.result.output === 'string' && content.result.output.trim() !== '') {
+            legacyDeterminedOutput = content.result.output;
+        } else if (typeof content.result === 'string' && content.result.trim() !== '') {
+            legacyDeterminedOutput = content.result;
+        }
+    } else if (typeof content.output === 'string' && content.output.trim() !== '') {
+        legacyDeterminedOutput = content.output;
+    }
+
     return {
       toolName,
       functionName: toolName.replace(/-/g, '_'),
-      toolOutput: content.result?.output || '',
-      isSuccess: content.result?.success !== false,
+      toolOutput: legacyDeterminedOutput,
+      isSuccess: content.result?.success !== false, // isSuccess logic might also need refinement
     };
+  }
+
+  // If content is a simple string and not parsed by other means, treat it as output
+  if (typeof content === 'string') {
+    return {
+      toolName: 'unknown',
+      functionName: 'unknown',
+      toolOutput: content,
+      isSuccess: true, // Assume success if it's just a string output
+    };
+  }
+
+  // Fallback for unhandled object structures that might represent an error or simple output
+  if (typeof content === 'object' && content !== null) {
+    if (typeof content.output === 'string') {
+      return {
+        toolName: content.toolName || content.name || 'unknown',
+        functionName: (content.toolName || content.name || 'unknown').replace(/-/g, '_'),
+        toolOutput: content.output,
+        isSuccess: content.isSuccess !== false,
+        summary: content.summary,
+      };
+    }
+    // If it's an object but doesn't match known structures, try to stringify it as a last resort for output
+    // This helps in cases where the result is a simple JSON object not fitting other patterns.
+    try {
+      const stringifiedOutput = JSON.stringify(content);
+      return {
+        toolName: 'unknown_object',
+        functionName: 'unknown_object',
+        toolOutput: stringifiedOutput,
+        isSuccess: true, // Assume success
+      };
+    } catch (e) {
+      // ignore stringify error
+    }
   }
 
   return null;

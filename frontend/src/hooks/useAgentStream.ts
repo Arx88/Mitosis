@@ -422,6 +422,7 @@ export function useAgentStream(
       callbacks,
       finalizeStream,
       updateStatus,
+      isThinkingInProgress, // Added missing dependency
     ],
   );
 
