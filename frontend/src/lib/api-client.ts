@@ -216,21 +216,27 @@ export const backendApi = {
         }
     },
 
-    post: async <T>(path: string, body: any): Promise<ApiResponse<T>> => {
+    post: async <T>(
+        path: string,
+        body: any,
+        options?: { headers?: Record<string, string>; [key: string]: any; }
+    ): Promise<ApiResponse<T>> => {
         try {
             const sessionResponse = await supabase.auth.getSession(); // Uses the local supabase instance
             const token = sessionResponse?.data?.session?.access_token;
 
-            const headers: HeadersInit = {
-                'Content-Type': 'application/json',
+            const mergedHeaders: Record<string, string> = {
+                'Content-Type': 'application/json', // Default Content-Type
+                ...options?.headers, // Spread custom headers from options
             };
+
             if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
+                mergedHeaders['Authorization'] = `Bearer ${token}`; // Add/override Authorization header
             }
 
             const response = await fetch(`${API_PREFIX}${path}`, {
                 method: 'POST',
-                headers,
+                headers: mergedHeaders,
                 body: JSON.stringify(body),
             });
 
