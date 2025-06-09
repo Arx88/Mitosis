@@ -122,7 +122,6 @@ function parseObjectToolResult(content: any): ParsedToolResult | null {
     // Legacy format with tool_name/xml_tag_name
     if ('tool_name' in nestedContent || 'xml_tag_name' in nestedContent) {
       const toolName = (nestedContent.tool_name || nestedContent.xml_tag_name || 'unknown').replace(/_/g, '-');
-      const toolName = (nestedContent.tool_name || nestedContent.xml_tag_name || 'unknown').replace(/_/g, '-');
 
       let nestedDeterminedOutput = '';
       if (nestedContent.result) {
