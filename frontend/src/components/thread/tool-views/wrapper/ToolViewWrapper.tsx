@@ -79,7 +79,6 @@ export interface ToolViewWrapperProps extends ToolViewProps {
   // Removed contentClassName as children are now more structured
   // assistantContent is now handled directly for the input section
   };
-}
 
 const standardShadow = '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1)';
 const toolWrapperAnimationVariants = {
