@@ -174,40 +174,25 @@ export function ToolCallSidePanel({
     return getUserFriendlyToolName(rawName);
   };
 
-  const completedToolCalls = toolCallSnapshots.filter(snapshot =>
-    snapshot.toolCall.toolResult?.content &&
-    snapshot.toolCall.toolResult.content !== 'STREAMING'
-  );
-  const totalCompletedCalls = completedToolCalls.length;
+  // Simplify display logic: always show the tool at the current internalIndex.
+  // The `useToolCalls` hook is responsible for setting `currentIndex` (which drives `internalIndex`)
+  // to the latest streaming tool if appropriate.
+  const displayToolCall = currentToolCall;
+  const displayIndex = safeInternalIndex; // Index within toolCallSnapshots
+  const displayTotalCalls = totalCalls;   // Total number of snapshots (completed or streaming)
 
-  let displayToolCall = currentToolCall;
-  let displayIndex = safeInternalIndex;
-  let displayTotalCalls = totalCalls;
-
-  const isCurrentToolStreaming = currentToolCall?.toolResult?.content === 'STREAMING';
-  if (isCurrentToolStreaming && totalCompletedCalls > 0) {
-    const lastCompletedSnapshot = completedToolCalls[completedToolCalls.length - 1];
-    displayToolCall = lastCompletedSnapshot.toolCall;
-    displayIndex = totalCompletedCalls - 1;
-    displayTotalCalls = totalCompletedCalls;
-  } else if (!isCurrentToolStreaming) {
-    const completedIndex = completedToolCalls.findIndex(snapshot => snapshot.id === currentSnapshot?.id);
-    if (completedIndex >= 0) {
-      displayIndex = completedIndex;
-      displayTotalCalls = totalCompletedCalls;
-    }
-  }
-
-  const currentToolName = displayToolCall?.assistantCall?.name || 'Tool Call';
-  const CurrentToolIcon = getToolIcon(
-    currentToolCall?.assistantCall?.name || 'unknown',
-  );
+  const currentToolNameFromSnapshot = displayToolCall?.assistantCall?.name || 'Tool Call';
+  const CurrentToolIcon = getToolIcon(currentToolNameFromSnapshot);
   const isStreaming = displayToolCall?.toolResult?.content === 'STREAMING';
 
   // Extract actual success value from tool content with fallbacks
-  const getActualSuccess = (toolCall: any): boolean => {
-    const content = toolCall?.toolResult?.content;
-    if (!content) return toolCall?.toolResult?.isSuccess ?? true;
+  const getActualSuccess = (toolCallInput: ToolCallInput | undefined): boolean => {
+    if (!toolCallInput) return true; // Default to success if no tool call
+    const content = toolCallInput.toolResult?.content;
+
+    // If content is "STREAMING", it's not failed yet, so consider it ongoing/successful for display purposes
+    if (content === 'STREAMING') return true;
+    if (!content) return toolCallInput.toolResult?.isSuccess ?? true;
 
     const safeParse = (data: any) => {
       try { return typeof data === 'string' ? JSON.parse(data) : data; }
@@ -215,25 +200,27 @@ export function ToolCallSidePanel({
     };
 
     const parsed = safeParse(content);
-    if (!parsed) return toolCall?.toolResult?.isSuccess ?? true;
+    if (!parsed) return toolCallInput.toolResult?.isSuccess ?? true;
 
-    if (parsed.content) {
-      const inner = safeParse(parsed.content);
-      if (inner?.tool_execution?.result?.success !== undefined) {
-        return inner.tool_execution.result.success;
-      }
+    // Check for explicit success field in various possible structures
+    if (parsed.tool_execution && typeof parsed.tool_execution === 'object' && parsed.tool_execution.result && typeof parsed.tool_execution.result.success === 'boolean') {
+      return parsed.tool_execution.result.success;
     }
-    const success = parsed.tool_execution?.result?.success ??
-      parsed.result?.success ??
-      parsed.success;
+    if (parsed.result && typeof parsed.result === 'object' && typeof parsed.result.success === 'boolean') {
+      return parsed.result.success;
+    }
+    if (typeof parsed.success === 'boolean') {
+      return parsed.success;
+    }
 
-    return success !== undefined ? success : (toolCall?.toolResult?.isSuccess ?? true);
+    // If no explicit success field, use the isSuccess from the ToolCallInput if available
+    return toolCallInput.toolResult?.isSuccess ?? true;
   };
 
-  const isSuccess = isStreaming ? true : getActualSuccess(displayToolCall);
+  const isSuccess = getActualSuccess(displayToolCall);
 
   const internalNavigate = React.useCallback((newIndex: number, source: string = 'internal') => {
-    if (newIndex < 0 || newIndex >= totalCalls) return;
+    if (newIndex < 0 || newIndex >= displayTotalCalls) return; // Use displayTotalCalls
 
     const isNavigatingToLatest = newIndex === totalCalls - 1;
 
@@ -258,36 +245,15 @@ export function ToolCallSidePanel({
 
   const navigateToPrevious = React.useCallback(() => {
     if (displayIndex > 0) {
-      const targetCompletedIndex = displayIndex - 1;
-      const targetSnapshot = completedToolCalls[targetCompletedIndex];
-      if (targetSnapshot) {
-        const actualIndex = toolCallSnapshots.findIndex(s => s.id === targetSnapshot.id);
-        if (actualIndex >= 0) {
-          setNavigationMode('manual');
-          internalNavigate(actualIndex, 'user_explicit');
-        }
-      }
+      internalNavigate(displayIndex - 1, 'user_explicit');
     }
-  }, [displayIndex, completedToolCalls, toolCallSnapshots, internalNavigate]);
+  }, [displayIndex, internalNavigate]);
 
   const navigateToNext = React.useCallback(() => {
     if (displayIndex < displayTotalCalls - 1) {
-      const targetCompletedIndex = displayIndex + 1;
-      const targetSnapshot = completedToolCalls[targetCompletedIndex];
-      if (targetSnapshot) {
-        const actualIndex = toolCallSnapshots.findIndex(s => s.id === targetSnapshot.id);
-        if (actualIndex >= 0) {
-          const isLatestCompleted = targetCompletedIndex === completedToolCalls.length - 1;
-          if (isLatestCompleted) {
-            setNavigationMode('live');
-          } else {
-            setNavigationMode('manual');
-          }
-          internalNavigate(actualIndex, 'user_explicit');
-        }
-      }
+      internalNavigate(displayIndex + 1, 'user_explicit');
     }
-  }, [displayIndex, displayTotalCalls, completedToolCalls, toolCallSnapshots, internalNavigate]);
+  }, [displayIndex, displayTotalCalls, internalNavigate]);
 
   const jumpToLive = React.useCallback(() => {
     setNavigationMode('live');
@@ -300,21 +266,9 @@ export function ToolCallSidePanel({
   }, [totalCalls, internalNavigate]);
 
   const handleSliderChange = React.useCallback(([newValue]: [number]) => {
-    const targetSnapshot = completedToolCalls[newValue];
-    if (targetSnapshot) {
-      const actualIndex = toolCallSnapshots.findIndex(s => s.id === targetSnapshot.id);
-      if (actualIndex >= 0) {
-        const isLatestCompleted = newValue === completedToolCalls.length - 1;
-        if (isLatestCompleted) {
-          setNavigationMode('live');
-        } else {
-          setNavigationMode('manual');
-        }
-
-        internalNavigate(actualIndex, 'user_explicit');
-      }
-    }
-  }, [completedToolCalls, toolCallSnapshots, internalNavigate]);
+    // Slider now directly corresponds to the index in toolCallSnapshots
+    internalNavigate(newValue, 'user_explicit');
+  }, [internalNavigate]);
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -643,14 +597,14 @@ export function ToolCallSidePanel({
           {!isMobile && (
             <div className="flex justify-between items-center gap-4">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="h-5 w-5 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-                  <CurrentToolIcon className="h-3 w-3 text-zinc-800 dark:text-zinc-300" />
+                <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center border border-border">
+                  <CurrentToolIcon className="h-3 w-3 text-muted-foreground" />
                 </div>
                 <span
-                  className="text-xs font-medium text-zinc-700 dark:text-zinc-300 truncate"
-                  title={currentToolName}
+                  className="text-xs font-medium text-foreground truncate"
+                  title={getUserFriendlyToolName(currentToolNameFromSnapshot)}
                 >
-                  {getUserFriendlyToolName(currentToolName)} {isStreaming && `(Running${dots})`}
+                  {getUserFriendlyToolName(currentToolNameFromSnapshot)} {isStreaming && `(Running${dots})`}
                 </span>
               </div>
 
