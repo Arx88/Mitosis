@@ -351,59 +351,54 @@ export function NavAgents() {
 
   return (
     <SidebarGroup>
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center mb-1">
         <SidebarGroupLabel>Tasks</SidebarGroupLabel>
-        {state !== 'collapsed' ? (
+        {state !== 'collapsed' && selectedThreads.size > 0 && (
           <div className="flex items-center space-x-1">
-            {selectedThreads.size > 0 ? (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={deselectAllThreads}
-                  className="h-7 w-7"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={selectAllThreads}
-                  disabled={selectedThreads.size === combinedThreads.length}
-                  className="h-7 w-7"
-                >
-                  <Check className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleMultiDelete}
-                  className="h-7 w-7 text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </>
-            ) : (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div>
-                    <Link
-                      href="/dashboard"
-                      className="text-muted-foreground hover:text-foreground h-7 w-7 flex items-center justify-center rounded-md"
-                    >
-                      <Plus className="h-4 w-4" />
-                      <span className="sr-only">New Agent</span>
-                    </Link>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>New Agent</TooltipContent>
-              </Tooltip>
-            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={deselectAllThreads}
+              className="h-7 w-7"
+              title="Deselect All"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={selectAllThreads}
+              disabled={selectedThreads.size === combinedThreads.length}
+              className="h-7 w-7"
+              title="Select All"
+            >
+              <Check className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleMultiDelete}
+              className="h-7 w-7 text-destructive"
+              title="Delete Selected"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
-        ) : null}
+        )}
       </div>
 
-      <SidebarMenu className="overflow-y-auto max-h-[calc(100vh-200px)] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+      {state !== 'collapsed' && (
+        <SidebarMenuItem className="mb-1">
+          <SidebarMenuButton asChild>
+            <Link href="/dashboard" className="flex items-center">
+              <Plus className="h-4 w-4 mr-2" />
+              <span>New Task</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      )}
+
+      <SidebarMenu className="overflow-y-auto max-h-[calc(100vh-240px)] [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
         {state === 'collapsed' && (
           <SidebarMenuItem>
             <Tooltip>
@@ -412,12 +407,12 @@ export function NavAgents() {
                   <SidebarMenuButton asChild>
                     <Link href="/dashboard" className="flex items-center">
                       <Plus className="h-4 w-4" />
-                      <span>New Agent</span>
+                      <span>New Task</span>
                     </Link>
                   </SidebarMenuButton>
                 </div>
               </TooltipTrigger>
-              <TooltipContent>New Agent</TooltipContent>
+              <TooltipContent>New Task</TooltipContent>
             </Tooltip>
           </SidebarMenuItem>
         )}
@@ -493,36 +488,19 @@ export function NavAgents() {
                           <div className="flex items-center group/icon relative">
                             {/* Show checkbox on hover or when selected, otherwise show MessagesSquare */}
                             {isThreadLoading ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
                             ) : (
-                              <>
-                                {/* MessagesSquare icon - hidden on hover if not selected */}
-                                <MessagesSquare
-                                  className={`h-4 w-4 transition-opacity duration-150 ${isSelected ? 'opacity-0' : 'opacity-100 group-hover/icon:opacity-0'
-                                    }`}
+                              <div className="mr-2 flex items-center">
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={() => toggleThreadSelection(thread.threadId)}
+                                  onClick={(e) => e.stopPropagation()} // Prevent navigation when clicking checkbox
+                                  className="h-4 w-4 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                                 />
-
-                                {/* Checkbox - appears on hover or when selected */}
-                                <div
-                                  className={`absolute inset-0 flex items-center justify-center transition-opacity duration-150 ${isSelected
-                                    ? 'opacity-100'
-                                    : 'opacity-0 group-hover/icon:opacity-100'
-                                    }`}
-                                  onClick={(e) => toggleThreadSelection(thread.threadId, e)}
-                                >
-                                  <div
-                                    className={`h-4 w-4 border rounded cursor-pointer hover:bg-muted/50 transition-colors flex items-center justify-center ${isSelected
-                                      ? 'bg-primary border-primary'
-                                      : 'border-muted-foreground/30 bg-background'
-                                      }`}
-                                  >
-                                    {isSelected && <Check className="h-3 w-3 text-primary-foreground" />}
-                                  </div>
-                                </div>
-                              </>
+                              </div>
                             )}
                           </div>
-                          <span className="ml-2">{thread.projectName}</span>
+                          <span className="truncate flex-grow" title={thread.projectName}>{thread.projectName}</span>
                         </Link>
                       </SidebarMenuButton>
                     </div>
@@ -533,7 +511,8 @@ export function NavAgents() {
                         <SidebarMenuAction
                           showOnHover
                           className="group-hover:opacity-100"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent row selection/navigation
                             // Ensure pointer events are enabled when dropdown opens
                             document.body.style.pointerEvents = 'auto';
                           }}
@@ -586,7 +565,7 @@ export function NavAgents() {
         ) : (
           <SidebarMenuItem>
             <SidebarMenuButton className="text-sidebar-foreground/70">
-              <MessagesSquare className="h-4 w-4" />
+              <MessagesSquare className="h-4 w-4 mr-2" />
               <span>No tasks yet</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -594,9 +573,9 @@ export function NavAgents() {
       </SidebarMenu>
 
       {(isDeletingSingle || isDeletingMultiple) && totalToDelete > 0 && (
-        <div className="mt-2 px-2">
+        <div className="mt-2 px-3">
           <div className="text-xs text-muted-foreground mb-1">
-            Deleting {deleteProgress > 0 ? `(${Math.floor(deleteProgress)}%)` : '...'}
+            Deleting {selectedThreads.size} task{selectedThreads.size > 1 ? 's' : ''} {deleteProgress > 0 ? `(${Math.floor(deleteProgress)}%)` : '...'}
           </div>
           <div className="w-full bg-secondary h-1 rounded-full overflow-hidden">
             <div

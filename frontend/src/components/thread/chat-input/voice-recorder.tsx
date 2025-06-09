@@ -155,18 +155,53 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         }
     };
 
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
+
+// ... (rest of the imports)
+
+export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
+    onTranscription,
+    disabled = false,
+}) => {
+    // ... (rest of the component code)
+
+    const getTooltipContent = () => {
+        switch (state) {
+            case 'recording':
+                return 'Stop recording (Right-click to cancel)';
+            case 'processing':
+                return 'Processing audio...';
+            default:
+                return 'Record voice message';
+        }
+    };
+
     return (
-        <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleClick}
-            onContextMenu={handleRightClick}
-            disabled={disabled || state === 'processing'}
-            className={`h-8 w-8 p-0 transition-colors ${getButtonClass()}`}
-            title={state === 'recording' ? 'Click to stop' : 'Click to start recording'}
-        >
-            {getIcon()}
-        </Button>
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleClick}
+                        onContextMenu={handleRightClick}
+                        disabled={disabled || state === 'processing'}
+                        className={`h-8 w-8 p-0 transition-colors ${getButtonClass()}`}
+                    // title attribute removed
+                    >
+                        {getIcon()}
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                    <p>{getTooltipContent()}</p>
+                </TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
     );
-}; 
+};
