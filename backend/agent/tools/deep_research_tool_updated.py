@@ -550,19 +550,35 @@ class DeepResearchToolUpdated(Tool):
             pdf_path = f"{self.research_dir}/{base_filename}.pdf"
 
             # Use the document generation tool to convert HTML to PDF
-            doc_result = await self.document_tool.run(
-                content=html_content,
+            # Corrected call to convert_document
+            doc_result_tuple = await self.document_tool.convert_document(
+                input_file_sandbox_path=html_path,
+                output_file_sandbox_path=pdf_path,
                 output_format="pdf",
-                output_filename=f"{base_filename}.pdf"
+                input_format="html"
             )
 
-            if doc_result[0].success:
-                # Parse the result to get the PDF path
-                result_data = doc_result[0].output
-                return result_data.document_path
+            if doc_result_tuple.success:
+                # The output of convert_document's success_response is a JSON string of a dict.
+                try:
+                    output_dict = json.loads(doc_result_tuple.output)
+                    returned_pdf_path = output_dict.get("output_file_sandbox_path")
+                    if returned_pdf_path:
+                        # Optionally, clean up the temporary HTML file if conversion was successful
+                        try:
+                            sandbox.fs.delete_file(html_path)
+                            logger.info(f"Successfully deleted temporary HTML file: {html_path}")
+                        except Exception as del_e:
+                            logger.warning(f"Could not delete temporary HTML file {html_path}: {del_e}")
+                        return returned_pdf_path
+                    else:
+                        logger.error(f"PDF conversion succeeded but output_file_sandbox_path not found in result. Output: {doc_result_tuple.output}")
+                        return markdown_path # Fallback to markdown
+                except json.JSONDecodeError as json_err:
+                    logger.error(f"Failed to parse JSON from convert_document output: {json_err}. Output was: {doc_result_tuple.output}")
+                    return markdown_path # Fallback to markdown
             else:
-                # If PDF generation fails, return the markdown path as fallback
-                logger.error(f"Failed to generate PDF, returning markdown instead: {doc_result[0].error}")
+                logger.error(f"Failed to generate PDF with convert_document, returning markdown instead. Error: {doc_result_tuple.output}")
                 return markdown_path
 
         # Default fallback to markdown
