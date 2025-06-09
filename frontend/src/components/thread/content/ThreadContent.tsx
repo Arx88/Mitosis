@@ -162,45 +162,49 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                         <div className="space-y-8 min-w-0">
                             {(() => {
                                 type MessageGroup = { type: 'user' | 'assistant_group'; messages: UnifiedMessage[]; key: string; };
+                                type MessageGroup = { type: 'user' | 'assistant_group' | 'error_group'; messages: UnifiedMessage[]; key: string; };
                                 const groupedMessages: MessageGroup[] = [];
                                 let currentGroup: MessageGroup | null = null;
-                                // let assistantGroupCounter = 0; // This was in the original file, check if needed by grouping logic.
-                                                                // The provided snippet for grouping logic did not use it.
-                                                                // It's safer to keep it if it was there. Let's assume it's part of the `... grouping logic ...`
 
-                                // Preserving original grouping logic structure from provided file:
                                 displayMessages.forEach((message, index) => {
-                                    // --- Start of original grouping logic ---
-                                    // This is a simplified placeholder for the actual grouping logic from the file.
-                                    // The actual grouping logic from the file needs to be here.
-                                    // For the purpose of this fix, we assume the original grouping logic correctly populates `currentGroup` and `groupedMessages`.
-                                    // Example:
-                                    if (message.type === 'user') {
+                                    const messageKey = message.message_id || `msg-${index}`;
+                                    // Check for explicit error type or metadata indicating an error
+                                    const isError = message.type === 'error' || (message.metadata && (message.metadata as any).error);
+
+                                    if (isError) {
+                                        if (currentGroup) groupedMessages.push(currentGroup);
+                                        currentGroup = { type: 'error_group', messages: [message], key: `error-${messageKey}` };
+                                        groupedMessages.push(currentGroup);
+                                        currentGroup = null; // Reset group after an error message
+                                    } else if (message.type === 'user') {
                                         if (currentGroup && currentGroup.type === 'user') {
                                             currentGroup.messages.push(message);
                                         } else {
                                             if (currentGroup) groupedMessages.push(currentGroup);
-                                            currentGroup = { type: 'user', messages: [message], key: message.message_id || `user-group-${index}` };
+                                            currentGroup = { type: 'user', messages: [message], key: `user-group-${messageKey}` };
                                         }
-                                    } else if (message.type === 'assistant') {
-                                        // This is a very simplified view. The actual logic might group multiple assistant messages
-                                        // or handle tool calls, etc.
+                                    } else if (message.type === 'assistant' || message.type === 'tool_code' || message.type === 'tool_error' || message.type === 'tool_result') {
+                                        if (currentGroup && currentGroup.type === 'assistant_group') {
+                                            currentGroup.messages.push(message);
+                                        } else {
+                                            if (currentGroup) groupedMessages.push(currentGroup);
+                                            currentGroup = { type: 'assistant_group', messages: [message], key: `assistant-group-${messageKey}` };
+                                        }
+                                    } else {
+                                        // Handle other message types if necessary, or log them
+                                        console.warn("Unhandled message type in grouping:", message.type, message);
+                                        // For now, push current group and create a new one for safety
                                         if (currentGroup) groupedMessages.push(currentGroup);
-                                        currentGroup = { type: 'assistant_group', messages: [message], key: message.message_id || `assistant-group-${index}` };
+                                         // Fallback: treat as a separate assistant message for now
+                                        currentGroup = { type: 'assistant_group', messages: [message], key: `unknown-type-group-${messageKey}` };
                                     }
-                                    // --- End of original grouping logic ---
                                 });
                                 if (currentGroup) groupedMessages.push(currentGroup);
 
-                                // The streamingTextContent handling was also part of the original file's IIFE.
-                                // This logic should be preserved if it existed at this level.
-                                // From the provided file, streamingTextContent is handled *inside* the map or later.
-                                // The provided snippet had: if (streamingTextContent) { /* ... streaming logic ... */ }
-                                // This should be here if it was part of the original grouping logic.
-                                // For now, assuming it's handled within the map or by specific message items.
 
                                 return groupedMessages.map((group, groupIndex) => {
                                     if (group.type === 'user') {
+                                        // Assuming only one message per user group for simplicity here, adjust if multiple user messages can be grouped
                                         const message = group.messages[0];
                                         const messageContent = (() => { try { const parsed = safeJsonParse<ParsedContent>(message.content, { content: message.content }); return parsed.content || message.content; } catch { return message.content; } })();
                                         if (debugMode) { return <MotionDiv key={group.key} className="flex justify-end"><div className="flex max-w-[85%] rounded-xl bg-primary/10 px-4 py-3 break-words overflow-hidden"><pre className="text-xs font-mono whitespace-pre-wrap overflow-x-auto min-w-0 flex-1">{message.content}</pre></div></MotionDiv>; }
@@ -209,7 +213,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                         const cleanContent = messageContent.replace(/\[Uploaded File: .*?\]/g, '').trim();
                                         return (
                                             <MotionDiv key={group.key} className="flex justify-end" initial={{ opacity: 0, x: 50 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, ease: "easeOut" }}>
-                                                <MotionDiv className="flex max-w-[85%] rounded-xl px-4 py-3 break-words overflow-hidden bg-blue-500 text-white dark:bg-blue-700 dark:text-gray-100" whileHover={{ scale: 1.02, y: -2, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' }} transition={{ type: "spring", stiffness: 300, damping: 10 }}>
+                                                <MotionDiv className="flex max-w-[85%] rounded-lg px-4 py-3 break-words overflow-hidden bg-blue-500 text-white dark:bg-blue-700 dark:text-gray-100 shadow-md" whileHover={{ scale: 1.02, y: -2, boxShadow: '0 6px 10px -1px rgba(0, 0, 0, 0.1), 0 3px 6px -1px rgba(0, 0, 0, 0.07)' }} transition={{ type: "spring", stiffness: 300, damping: 10 }}>
                                                     <div className="space-y-3 min-w-0 flex-1">
                                                         {cleanContent && <Markdown className="text-sm prose prose-sm dark:prose-invert chat-markdown max-w-none [&>:first-child]:mt-0 prose-headings:mt-3 break-words overflow-wrap-anywhere">{cleanContent}</Markdown>}
                                                         {renderAttachments(attachments as string[], handleOpenFileViewer, sandboxId, project)}
@@ -243,7 +247,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                         <MotionDiv className="rounded-md flex items-center justify-center" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.2, duration: 0.3 }}>{agentAvatar}</MotionDiv>
                                                         <MotionP className='ml-2 text-sm text-muted-foreground' initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3, duration: 0.3 }}>{agentName ? agentName : 'Suna'}</MotionP>
                                                     </div>
-                                                    {(reasoning || isAgentActuallyThinking) && (
+                                                    {(reasoning || isAgentActuallyThinking && groupIndex === groupedMessages.length -1 ) && ( // Show reasoning only for the last assistant group if agent is thinking
                                                         <ReasoningView
                                                             content={reasoning}
                                                             isStreamingAgentActive={isAgentActuallyThinking}
@@ -251,7 +255,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                         />
                                                     )}
                                                     <MotionDiv
-                                                        className="flex max-w-[90%] rounded-lg text-sm break-words overflow-hidden bg-slate-100 dark:bg-slate-800 p-3 border border-border/50 shadow-sm"
+                                                        className="flex max-w-[90%] rounded-lg text-sm break-words overflow-hidden bg-background dark:bg-neutral-800/60 p-3 border border-border/70 shadow-sm"
                                                         initial={{ opacity: 0, y: 10 }}
                                                         animate={{ opacity: 1, y: 0 }}
                                                         transition={{ duration: 0.4, ease: "easeOut", delay: 0.7 }}
@@ -267,30 +271,57 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                                 const elements: React.ReactNode[] = [];
                                                                 let assistantMessageCount = 0;
                                                                 group.messages.forEach((message, msgIndex) => {
+                                                                    const msgKey = message.message_id || `submsg-${message.type}-${msgIndex}`;
+                                                                    let renderedContent: React.ReactNode = null;
+                                                                    let isErrorContent = false;
+
                                                                     if (message.type === 'assistant') {
                                                                         const parsedContent = safeJsonParse<ParsedContent>(message.content, {});
-                                                                        const msgKey = message.message_id || `submsg-assistant-${msgIndex}`;
-                                                                        if (!parsedContent.content && message.message_id !== 'streamingTextContent') return;
                                                                         const actualContentToRender = message.message_id === 'streamingTextContent' ? streamingTextContent : parsedContent.content;
-                                                                        const renderedContent = renderMarkdownContent(actualContentToRender || "", handleToolClick, message.message_id, handleOpenFileViewer, sandboxId, project, debugMode, true);
-                                                                        if (renderedContent) {
-                                                                            elements.push(<div key={msgKey} className={assistantMessageCount > 0 ? "mt-4" : ""}><div className="prose prose-sm dark:prose-invert chat-markdown max-w-none [&>:first-child]:mt-0 prose-headings:mt-3 break-words overflow-hidden">{renderedContent}</div></div>);
-                                                                            assistantMessageCount++;
+                                                                        if (actualContentToRender || message.message_id === 'streamingTextContent') { // Ensure streaming text also renders
+                                                                            renderedContent = renderMarkdownContent(actualContentToRender || "", handleToolClick, message.message_id, handleOpenFileViewer, sandboxId, project, debugMode, true);
                                                                         }
+                                                                    } else if (message.type === 'tool_result') {
+                                                                        const toolResult = parseToolResult(message.content);
+                                                                        isErrorContent = !toolResult.success;
+                                                                        renderedContent = (
+                                                                            <div className={`p-2 rounded-md ${isErrorContent ? 'bg-destructive/10 border border-destructive/30' : 'bg-primary/5 border border-primary/20'}`}>
+                                                                                <div className="flex items-center text-xs font-semibold mb-1">
+                                                                                    {isErrorContent ? <AlertTriangle className="h-4 w-4 mr-2 text-destructive" /> : <CheckCircle className="h-4 w-4 mr-2 text-green-500" />}
+                                                                                    Tool Result: {toolResult.toolName}
+                                                                                </div>
+                                                                                <pre className="text-xs whitespace-pre-wrap overflow-x-auto">{toolResult.result}</pre>
+                                                                            </div>
+                                                                        );
+                                                                    } else if (message.type === 'tool_code') { // Example: Displaying code generated by a tool
+                                                                        const codeContent = typeof message.content === 'string' ? message.content : JSON.stringify(message.content, null, 2);
+                                                                        renderedContent = <Markdown className="text-sm prose prose-sm dark:prose-invert chat-markdown max-w-none break-words">{`\`\`\`python\n${codeContent}\n\`\`\``}</Markdown>;
+                                                                    }
+                                                                    // Add more specific handlers for 'tool_code', 'tool_error' if needed
+
+                                                                    if (renderedContent) {
+                                                                        elements.push(
+                                                                            <div key={msgKey} className={`${assistantMessageCount > 0 ? "mt-3 pt-3 border-t border-border/50" : ""} ${isErrorContent ? 'text-destructive' : ''}`}>
+                                                                                <div className="prose prose-sm dark:prose-invert chat-markdown max-w-none [&>:first-child]:mt-0 prose-headings:mt-3 break-words overflow-hidden">
+                                                                                    {renderedContent}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                        assistantMessageCount++;
                                                                     }
                                                                 });
                                                                 return elements;
                                                             })()}
-                                                            {/* Preserving original streaming indicators logic from provided file */}
-                                                            {groupIndex === groupedMessages.length - 1 && !readOnly && (streamHookStatus === 'streaming' || streamHookStatus === 'connecting') && !group.messages.find(m => m.message_id === 'streamingTextContent') && (
-                                                                <div className="flex items-center text-xs text-muted-foreground">
-                                                                    <CircleDashed className="h-3 w-3 mr-1.5 animate-spin" />
-                                                                    <span>Assistant is thinking...</span>
+                                                            {/* Streaming indicators */}
+                                                            {groupIndex === groupedMessages.length - 1 && !readOnly && (streamHookStatus === 'streaming' || streamHookStatus === 'connecting') && !isAgentActuallyThinking && !group.messages.find(m => m.message_id === 'streamingTextContent') && (
+                                                                <div className="flex items-center text-xs text-muted-foreground pt-2">
+                                                                    <CircleDashed className="h-3.5 w-3.5 mr-2 animate-spin" />
+                                                                    <span>Assistant is preparing response...</span>
                                                                 </div>
                                                             )}
                                                             {readOnly && groupIndex === groupedMessages.length - 1 && isStreamingText && (
-                                                                <div className="flex items-center text-xs text-muted-foreground">
-                                                                    <CircleDashed className="h-3 w-3 mr-1.5 animate-spin" />
+                                                                <div className="flex items-center text-xs text-muted-foreground pt-2">
+                                                                    <CircleDashed className="h-3.5 w-3.5 mr-2 animate-spin" />
                                                                     <span>Playing back response...</span>
                                                                 </div>
                                                             )}
@@ -299,11 +330,27 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                 </div>
                                             </MotionDiv>
                                         );
+                                    } else if (group.type === 'error_group') {
+                                        const message = group.messages[0];
+                                        const errorMessage = (typeof message.content === 'string' ? message.content : JSON.stringify(message.content)) || (message.metadata as any)?.error?.message || "An unexpected error occurred.";
+                                        return (
+                                            <MotionDiv key={group.key} className="flex justify-start" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                                                <div className="flex items-start max-w-[90%] rounded-lg bg-destructive/10 text-destructive dark:bg-red-900/30 dark:text-red-300 p-3 border border-destructive/30 shadow-sm">
+                                                    <AlertTriangle className="h-5 w-5 mr-3 mt-0.5 flex-shrink-0" />
+                                                    <div className="flex-grow">
+                                                        <p className="font-semibold text-sm mb-1">Error</p>
+                                                        <div className="text-xs prose prose-sm prose-destructive dark:prose-invert max-w-none break-words overflow-wrap-anywhere">
+                                                            <Markdown>{errorMessage}</Markdown>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </MotionDiv>
+                                        );
                                     }
                                     return null;
                                 });
                             })()}
-                            {/* Any other elements that were inside "space-y-8" but after the map would go here. */}
+                            {/* AgentLoader is handled by the main conditional check for empty messages */}
                             {/* Based on the provided file, there are no such elements directly here. AgentLoader is handled by the main conditional. */}
                         </div>
                     </div>

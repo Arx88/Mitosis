@@ -182,33 +182,48 @@ export const MessageInput = forwardRef<HTMLTextAreaElement, MessageInputProps>(
               canAccessModel={canAccessModel}
               refreshCustomModels={refreshCustomModels}
             />
-            <Button
-              type="submit"
-              onClick={isAgentRunning && onStopAgent ? onStopAgent : onSubmit}
-              size="sm"
-              className={cn(
-                'w-7 h-7 flex-shrink-0 self-end',
-                isAgentRunning ? 'bg-red-500 hover:bg-red-600' : '',
-                (!value.trim() && uploadedFiles.length === 0 && !isAgentRunning) ||
-                  loading ||
-                  (disabled && !isAgentRunning)
-                  ? 'opacity-50'
-                  : '',
-              )}
-              disabled={
-                (!value.trim() && uploadedFiles.length === 0 && !isAgentRunning) ||
-                loading ||
-                (disabled && !isAgentRunning)
-              }
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : isAgentRunning ? (
-                <Square className="h-4 w-4" />
-              ) : (
-                <ArrowUp className="h-4 w-4" />
-              )}
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="submit"
+                    onClick={isAgentRunning && onStopAgent ? onStopAgent : onSubmit}
+                    size="sm"
+                    className={cn(
+                      'w-7 h-7 flex-shrink-0 self-end',
+                      isAgentRunning ? 'bg-red-500 hover:bg-red-600' : '',
+                      (!value.trim() && uploadedFiles.length === 0 && !isAgentRunning) ||
+                        loading ||
+                        (disabled && !isAgentRunning)
+                        ? 'opacity-50'
+                        : '',
+                    )}
+                    disabled={
+                      (!value.trim() && uploadedFiles.length === 0 && !isAgentRunning) ||
+                      loading ||
+                      (disabled && !isAgentRunning)
+                    }
+                  >
+                    {loading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : isAgentRunning ? (
+                      <Square className="h-4 w-4" />
+                    ) : (
+                      <ArrowUp className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p>
+                    {loading
+                      ? 'Sending...'
+                      : isAgentRunning
+                        ? 'Stop agent'
+                        : 'Send message (Enter)'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
       </div>

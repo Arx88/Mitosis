@@ -282,15 +282,21 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
                 />                
                 </div>              
               )}                            
-              <AttachmentGroup                
-              files={uploadedFiles || []}                
-              sandboxId={sandboxId}                
-              onRemove={removeUploadedFile}                
-              layout="inline"                
-              maxHeight="216px"                
-              showPreviews={true}              
+              <AttachmentGroup
+                files={uploadedFiles || []}
+                sandboxId={sandboxId}
+                onRemove={removeUploadedFile}
+                layout="inline"
+                maxHeight="216px"
+                showPreviews={true}
+                isUploadingGlobal={isUploading} // Pass down global uploading state
               />
-
+              {isUploading && (!uploadedFiles || uploadedFiles.length === 0) && (
+                <div className="px-3 py-2 text-sm text-muted-foreground flex items-center">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Processing file(s)...
+                </div>
+              )}
               <MessageInput
                 ref={textareaRef}
                 value={value}
@@ -308,11 +314,11 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
                 uploadedFiles={uploadedFiles}
 
                 fileInputRef={fileInputRef}
-                isUploading={isUploading}
+                isUploading={isUploading} // This is for individual file input, keep it if MessageInput handles its own spinner
                 sandboxId={sandboxId}
                 setPendingFiles={setPendingFiles}
                 setUploadedFiles={setUploadedFiles}
-                setIsUploading={setIsUploading}
+                setIsUploading={setIsUploading} // Allow MessageInput to control global isUploading for its own processes
                 hideAttachments={hideAttachments}
                 messages={messages}
 
