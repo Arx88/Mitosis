@@ -291,7 +291,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                                                                     {isErrorContent ? <AlertTriangle className="h-4 w-4 mr-2 text-destructive" /> : <CheckCircle className="h-4 w-4 mr-2 text-green-500" />}
                                                                                     Tool Result: {toolResult.toolName}
                                                                                 </div>
-                                                                                <pre className="text-xs whitespace-pre-wrap overflow-x-auto">{toolResult.result}</pre>
+                                                                                <pre className="text-xs whitespace-pre-wrap overflow-x-auto">{toolResult.toolOutput}</pre>
                                                                             </div>
                                                                         );
                                                                     } else if (parsedAssistantContent?.metadata?.tool_code) { // Hypothetical: check for tool code in metadata
