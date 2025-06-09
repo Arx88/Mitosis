@@ -284,7 +284,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
 
                                                                     if (parsedAssistantContent?.metadata?.tool_result) { // Hypothetical: check for tool result in metadata
                                                                         const toolResult = parseToolResult(parsedAssistantContent.metadata.tool_result); // Assuming parseToolResult can handle this structure
-                                                                        isErrorContent = !toolResult.success;
+                                                                        isErrorContent = !toolResult.isSuccess;
                                                                         renderedContent = (
                                                                             <div className={`p-2 rounded-md ${isErrorContent ? 'bg-destructive/10 border border-destructive/30' : 'bg-primary/5 border border-primary/20'}`}>
                                                                                 <div className="flex items-center text-xs font-semibold mb-1">
