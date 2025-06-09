@@ -349,7 +349,7 @@ export const agentApi = {
   },
 
   async getStatus(agentRunId: string): Promise<AgentRun | null> {
-    const result = await backendApi.get(
+    const result = await backendApi.get<AgentRun>(
       `/agent/${agentRunId}/status`,
       {
         errorContext: { operation: 'get agent status', resource: 'AI assistant status' },
@@ -357,7 +357,10 @@ export const agentApi = {
       }
     );
 
-    return result.data || null;
+    if (result.data && result.data.id && result.data.thread_id && result.data.status && result.data.started_at) {
+      return result.data;
+    }
+    return null;
   },
 
   async getRuns(threadId: string): Promise<AgentRun[]> {
