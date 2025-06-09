@@ -1,8 +1,8 @@
-import { createClient } from './supabase/client'; // Changed import name
-// Removed: import { PUBLIC_API_PREFIX } from '$env/static/public';
+import { createClient } from './supabase/client';
 
-const supabase = createClient(); // Changed initialization call
-const API_PREFIX = process.env.NEXT_PUBLIC_API_PREFIX || '/api'; // Redefined API_PREFIX
+// Initialize Supabase client internally
+const supabase = createClient();
+const API_PREFIX = process.env.NEXT_PUBLIC_API_PREFIX || '/api';
 
 export interface InitiateAgentPayload {
 	prompt: string;
@@ -11,7 +11,7 @@ export interface InitiateAgentPayload {
 	reasoning_effort?: string;
 	enable_context_manager?: boolean;
 	agent_id?: string;
-	files?: FileList | File[]; // Accept FileList or File[]
+	files?: FileList | File[];
 	is_agent_builder?: boolean;
 	target_agent_id?: string;
 }
@@ -43,10 +43,10 @@ export function initiateAndStreamAgent(
 	const { signal } = abortController;
 
 	const execute = async () => {
-		console.log('Executing initiateAndStreamAgent'); // Added log
+		console.log('Executing initiateAndStreamAgent');
 		try {
-			const session = await supabase.auth.getSession();
-			const token = session?.data?.session?.access_token;
+			const sessionResponse = await supabase.auth.getSession();
+			const token = sessionResponse?.data?.session?.access_token;
 
 			if (!token) {
 				throw new Error('Authentication token not available.');
@@ -70,7 +70,6 @@ export function initiateAndStreamAgent(
 				formData.append('target_agent_id', payload.target_agent_id);
 
 			if (payload.files) {
-                // Ensure payload.files is an array before iterating
                 const filesArray = Array.isArray(payload.files) ? payload.files : Array.from(payload.files);
 				for (const file of filesArray) {
 					formData.append('files', file);
@@ -108,10 +107,9 @@ export function initiateAndStreamAgent(
 			while (true) {
 				const { done, value } = await reader.read();
 				if (done) {
-					// Process any remaining data in the buffer when the stream is done
 					if (buffer.startsWith('data: ')) {
 						const jsonString = buffer.substring('data: '.length).trim();
-						if (jsonString) { // Ensure there's content after "data: "
+						if (jsonString) {
 							try {
 								const eventData = JSON.parse(jsonString);
 								handlers.onMessage(eventData as StreamEvent);
@@ -122,7 +120,7 @@ export function initiateAndStreamAgent(
 								}
 							}
 						}
-					} else if (buffer.trim()) { // If it's not empty and doesn't start with "data: "
+					} else if (buffer.trim()) {
 						console.warn('Received non-SSE data at stream end:', buffer);
 					}
 					break;
@@ -131,8 +129,6 @@ export function initiateAndStreamAgent(
 				buffer += decoder.decode(value, { stream: true });
 				const messages = buffer.split('\n\n');
 
-				// The last part of the split is potentially an incomplete message, so keep it in buffer.
-				// All other parts are complete messages.
 				buffer = messages.pop() || '';
 
 				for (const msg of messages) {
@@ -147,7 +143,7 @@ export function initiateAndStreamAgent(
 								handlers.onError(new Error(`Failed to parse SSE event: ${jsonString}`));
 							}
 						}
-					} else if (msg.trim()) { // Log if we receive a non-empty message not starting with "data: "
+					} else if (msg.trim()) {
                         console.warn('Received message not in SSE format:', msg);
                     }
 				}
@@ -176,17 +172,90 @@ export function initiateAndStreamAgent(
 	};
 }
 
-// Example of how to use other API functions (if any) - placeholder
-export async function getSomeData(): Promise<any> {
-	const session = await supabase.auth.getSession();
-	const token = session?.data?.session?.access_token;
-	if (!token) throw new Error('Not authenticated');
-
-	const response = await fetch(`${API_PREFIX}/some-data-route`, {
-		headers: {
-			Authorization: `Bearer ${token}`
-		}
-	});
-	if (!response.ok) throw new Error('Failed to fetch data');
-	return response.json();
+// Standard API Response Structure
+export interface ApiResponse<T> {
+    data: T | null;
+    error: Error | null;
+    success: boolean;
 }
+
+// backendApi Implementation
+export const backendApi = {
+    get: async <T>(path: string): Promise<ApiResponse<T>> => {
+        try {
+            const sessionResponse = await supabase.auth.getSession();
+            const token = sessionResponse?.data?.session?.access_token;
+
+            const headers: HeadersInit = {
+                'Content-Type': 'application/json',
+            };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`${API_PREFIX}${path}`, { // Ensure path starts with / or handle concatenation better
+                method: 'GET',
+                headers,
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => `HTTP error ${response.status}`);
+                return { data: null, error: new Error(errorText || `HTTP error ${response.status}`), success: false };
+            }
+
+            // Handle 204 No Content or other cases where response.json() might fail
+            if (response.status === 204 || response.headers.get('content-length') === '0') {
+                return { data: null, error: null, success: true };
+            }
+
+            const responseData: T = await response.json();
+            return { data: responseData, error: null, success: true };
+        } catch (error) {
+            return { data: null, error: error instanceof Error ? error : new Error(String(error)), success: false };
+        }
+    },
+
+    post: async <T>(path: string, body: any): Promise<ApiResponse<T>> => {
+        try {
+            const sessionResponse = await supabase.auth.getSession();
+            const token = sessionResponse?.data?.session?.access_token;
+
+            const headers: HeadersInit = {
+                'Content-Type': 'application/json',
+            };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const response = await fetch(`${API_PREFIX}${path}`, { // Ensure path starts with /
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => `HTTP error ${response.status}`);
+                return { data: null, error: new Error(errorText || `HTTP error ${response.status}`), success: false };
+            }
+
+            if (response.status === 204 || response.headers.get('content-length') === '0') {
+                return { data: null, error: null, success: true }; // Or T could be null for 204
+            }
+
+            // Only parse JSON if there's content
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                const responseData: T = await response.json();
+                return { data: responseData, error: null, success: true };
+            } else {
+                // Handle non-JSON responses, like plain text, if necessary
+                // For now, assuming successful non-JSON, non-204 responses are treated as successful with null data
+                // Or you could try response.text() and cast if T is string
+                return { data: null, error: null, success: true };
+            }
+
+        } catch (error) {
+            return { data: null, error: error instanceof Error ? error : new Error(String(error)), success: false };
+        }
+    },
+};
