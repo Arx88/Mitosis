@@ -1,7 +1,7 @@
-import { getSupabaseClient } from './supabase/client'; // Changed import
+import { createClient } from './supabase/client'; // Changed import name
 // Removed: import { PUBLIC_API_PREFIX } from '$env/static/public';
 
-const supabase = getSupabaseClient(); // Call the function to get the client
+const supabase = createClient(); // Changed initialization call
 const API_PREFIX = process.env.NEXT_PUBLIC_API_PREFIX || '/api'; // Redefined API_PREFIX
 
 export interface InitiateAgentPayload {
