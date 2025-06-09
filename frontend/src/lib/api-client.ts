@@ -183,21 +183,25 @@ export interface ApiResponse<T> {
 
 // ---- backendApi Implementation ----
 export const backendApi = {
-    get: async <T>(path: string): Promise<ApiResponse<T>> => {
+    get: async <T>(
+        path: string,
+        options?: { headers?: Record<string, string>; [key: string]: any; }
+    ): Promise<ApiResponse<T>> => {
         try {
             const sessionResponse = await supabase.auth.getSession(); // Uses the local supabase instance
             const token = sessionResponse?.data?.session?.access_token;
 
-            const headers: HeadersInit = {
-                'Content-Type': 'application/json',
+            const mergedHeaders: Record<string, string> = {
+                ...options?.headers, // Spread custom headers from options
             };
+
             if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
+                mergedHeaders['Authorization'] = `Bearer ${token}`; // Add/override Authorization header
             }
 
             const response = await fetch(`${API_PREFIX}${path}`, {
                 method: 'GET',
-                headers,
+                headers: mergedHeaders,
             });
 
             if (!response.ok) {
