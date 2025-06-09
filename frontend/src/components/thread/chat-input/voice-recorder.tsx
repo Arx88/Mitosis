@@ -2,6 +2,12 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'; // Adde
 import { Mic, Square, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranscription } from '@/hooks/react-query/transcription/use-transcription';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface VoiceRecorderProps {
     onTranscription: (text: string) => void;
@@ -154,21 +160,6 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 return <Mic className="h-4 w-4" />;
         }
     };
-
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
-
-// ... (rest of the imports)
-
-export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
-    onTranscription,
-    disabled = false,
-}) => {
-    // ... (rest of the component code)
 
     const getTooltipContent = () => {
         switch (state) {
