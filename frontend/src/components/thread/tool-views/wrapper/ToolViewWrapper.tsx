@@ -109,7 +109,6 @@ export function ToolViewWrapper({
   toolTimestamp,
   children,
   className,
-  contentClassName,
   showStatus = true, // Keep showStatus, it might control parts of the trigger
   customStatus, // Keep customStatus, might be used for summary
   assistantContent, // Pass through for getToolSummary
