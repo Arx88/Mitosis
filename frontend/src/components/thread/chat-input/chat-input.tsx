@@ -289,7 +289,6 @@ export const ChatInput = forwardRef<ChatInputHandles, ChatInputProps>(
                 layout="inline"
                 maxHeight="216px"
                 showPreviews={true}
-                isUploadingGlobal={isUploading} // Pass down global uploading state
               />
               {isUploading && (!uploadedFiles || uploadedFiles.length === 0) && (
                 <div className="px-3 py-2 text-sm text-muted-foreground flex items-center">
