@@ -377,14 +377,20 @@ export const agentApi = {
 
 export const billingApi = {
   async getSubscription(): Promise<SubscriptionStatus | null> {
-    const result = await backendApi.get(
+    const result = await backendApi.get<SubscriptionStatus>(
       '/billing/subscription',
       {
         errorContext: { operation: 'load subscription', resource: 'billing information' },
       }
     );
 
-    return result.data || null;
+    if (result.data &&
+        typeof result.data.status === 'string' &&
+        typeof result.data.cancel_at_period_end === 'boolean' &&
+        typeof result.data.has_schedule === 'boolean') {
+      return result.data;
+    }
+    return null;
   },
 
   async checkStatus(): Promise<BillingStatusResponse | null> {
