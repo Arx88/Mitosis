@@ -1,7 +1,8 @@
-import { supabase } from '$lib/supabaseClient';
-import { PUBLIC_API_PREFIX } from '$env/static/public';
+import { getSupabaseClient } from './supabase/client'; // Changed import
+// Removed: import { PUBLIC_API_PREFIX } from '$env/static/public';
 
-const API_PREFIX = PUBLIC_API_PREFIX || '/api';
+const supabase = getSupabaseClient(); // Call the function to get the client
+const API_PREFIX = process.env.NEXT_PUBLIC_API_PREFIX || '/api'; // Redefined API_PREFIX
 
 export interface InitiateAgentPayload {
 	prompt: string;
