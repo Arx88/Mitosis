@@ -593,7 +593,7 @@ export function ToolCallSidePanel({
         {renderContent()}
       </div>
 
-      {(displayTotalCalls > 1 || (isCurrentToolStreaming && totalCompletedCalls > 0)) && (
+      {(displayTotalCalls > 1 || (isStreaming && totalCompletedCalls > 0)) && (
         <div
           className={cn(
             'border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900',
@@ -662,7 +662,7 @@ export function ToolCallSidePanel({
 
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">
                   {displayIndex + 1} / {displayTotalCalls}
-                  {isCurrentToolStreaming && totalCompletedCalls > 0 && (
+                  {isStreaming && totalCompletedCalls > 0 && (
                     <span className="text-blue-600 dark:text-blue-400"> • Running</span>
                   )}
                 </span>
