@@ -394,18 +394,27 @@ export const billingApi = {
   },
 
   async checkStatus(): Promise<BillingStatusResponse | null> {
-    const result = await backendApi.get(
+    const result = await backendApi.get<BillingStatusResponse>(
       '/billing/status',
       {
         errorContext: { operation: 'check billing status', resource: 'account status' },
       }
     );
 
-    return result.data || null;
+    if (result.data &&
+        typeof result.data.can_run === 'boolean' &&
+        typeof result.data.message === 'string' &&
+        typeof result.data.subscription === 'object' && result.data.subscription &&
+        typeof result.data.subscription.price_id === 'string' &&
+        typeof result.data.subscription.plan_name === 'string'
+        ) {
+      return result.data;
+    }
+    return null;
   },
 
   async createCheckoutSession(request: CreateCheckoutSessionRequest): Promise<CreateCheckoutSessionResponse | null> {
-    const result = await backendApi.post(
+    const result = await backendApi.post<CreateCheckoutSessionResponse>(
       '/billing/create-checkout-session',
       request,
       {
@@ -413,11 +422,14 @@ export const billingApi = {
       }
     );
 
-    return result.data || null;
+    if (result.data && typeof result.data.status === 'string') {
+      return result.data;
+    }
+    return null;
   },
 
   async createPortalSession(request: CreatePortalSessionRequest): Promise<{ url: string } | null> {
-    const result = await backendApi.post(
+    const result = await backendApi.post<{ url: string }>(
       '/billing/create-portal-session',
       request,
       {
@@ -425,24 +437,33 @@ export const billingApi = {
       }
     );
 
-    return result.data || null;
+    if (result.data && typeof result.data.url === 'string') {
+      return result.data;
+    }
+    return null;
   },
 
   async getAvailableModels(): Promise<AvailableModelsResponse | null> {
-    const result = await backendApi.get(
+    const result = await backendApi.get<AvailableModelsResponse>(
       '/billing/available-models',
       {
         errorContext: { operation: 'load available models', resource: 'AI models' },
       }
     );
 
-    return result.data || null;
+    if (result.data &&
+        Array.isArray(result.data.models) &&
+        typeof result.data.subscription_tier === 'string' &&
+        typeof result.data.total_models === 'number') {
+      return result.data;
+    }
+    return null;
   },
 };
 
 export const healthApi = {
   async check(): Promise<HealthCheckResponse | null> {
-    const result = await backendApi.get(
+    const result = await backendApi.get<HealthCheckResponse>(
       '/health',
       {
         errorContext: { operation: 'check system health', resource: 'system status' },
@@ -450,6 +471,12 @@ export const healthApi = {
       }
     );
 
-    return result.data || null;
+    if (result.data &&
+        typeof result.data.status === 'string' &&
+        typeof result.data.timestamp === 'string' &&
+        typeof result.data.instance_id === 'string') {
+      return result.data;
+    }
+    return null;
   },
-}; 
+};
