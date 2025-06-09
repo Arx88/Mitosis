@@ -321,7 +321,7 @@ export const agentApi = {
       stream?: boolean;
     }
   ): Promise<{ agent_run_id: string } | null> {
-    const result = await backendApi.post(
+    const result = await backendApi.post<{ agent_run_id: string }>(
       `/thread/${threadId}/agent/start`,
       options,
       {
