@@ -364,14 +364,14 @@ export const agentApi = {
   },
 
   async getRuns(threadId: string): Promise<AgentRun[]> {
-    const result = await backendApi.get(
+    const result = await backendApi.get<AgentRun[]>(
       `/thread/${threadId}/agent/runs`,
       {
         errorContext: { operation: 'load agent runs', resource: 'conversation history' },
       }
     );
 
-    return result.data || [];
+    return Array.isArray(result.data) ? result.data : [];
   },
 };
 
