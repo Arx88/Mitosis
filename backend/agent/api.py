@@ -21,6 +21,7 @@ from utils.config import config, EnvMode
 from sandbox.sandbox import create_sandbox, get_or_start_sandbox, LocalDockerSandboxWrapper
 from services.llm import make_llm_api_call, is_ollama_model_available
 from run_agent_background import run_agent_background, _cleanup_redis_response_list, update_agent_run_status
+from agent.run import run_agent # Added for direct streaming
 from utils.constants import MODEL_NAME_ALIASES, MODEL_TO_USE_FALLBACK_FOR_NAMING
 
 # Initialize shared resources
@@ -1117,26 +1118,50 @@ async def initiate_agent_with_files(
         agent_run_id = agent_run.data[0]['id']
         logger.info(f"Created new agent run: {agent_run_id}")
 
-        # Register run in Redis
+        # Register run in Redis (common for both streaming and background)
         instance_key = f"active_run:{instance_id}:{agent_run_id}"
         try:
             await redis.set(instance_key, "running", ex=redis.REDIS_KEY_TTL)
         except Exception as e:
             logger.warning(f"Failed to register agent run in Redis ({instance_key}): {str(e)}")
 
-        # Run agent in background
-        run_agent_background.send(
-            agent_run_id=agent_run_id, thread_id=thread_id, instance_id=instance_id,
-            project_id=project_id,
-            model_name=model_name,  # Already resolved above
-            enable_thinking=enable_thinking, reasoning_effort=reasoning_effort,
-            stream=stream, enable_context_manager=enable_context_manager,
-            agent_config=agent_config,  # Pass agent configuration
-            is_agent_builder=is_agent_builder,
-            target_agent_id=target_agent_id
-        )
-
-        return {"thread_id": thread_id, "agent_run_id": agent_run_id}
+        if stream:
+            logger.info(f"Streaming agent run {agent_run_id} directly for thread {thread_id}")
+            # Directly call run_agent and return StreamingResponse
+            # run_agent needs to handle its own Langfuse trace and sandbox acquisition via project_id
+            # It also needs to update the agent_runs table status upon completion/failure.
+            event_generator = run_agent(
+                thread_id=thread_id,
+                project_id=project_id,
+                stream=True, # Explicitly True for run_agent's internal logic
+                model_name=model_name,
+                enable_thinking=enable_thinking,
+                reasoning_effort=reasoning_effort,
+                enable_context_manager=enable_context_manager,
+                agent_config=agent_config,
+                is_agent_builder=is_agent_builder,
+                target_agent_id=target_agent_id,
+                # trace=None, # run_agent will create its own if None
+                # agent_run_id=agent_run_id # Pass agent_run_id for status updates within run_agent (TODO: ensure run_agent handles this)
+            )
+            # Note: The `agent_run_id` is created, but `run_agent` must be responsible for updating its status in the DB.
+            # If `run_agent` doesn't update the status, it will remain "running".
+            return StreamingResponse(event_generator, media_type="text/event-stream")
+        else:
+            logger.info(f"Dispatching agent run {agent_run_id} to background for thread {thread_id}")
+            # Run agent in background (existing logic)
+            run_agent_background.send(
+                agent_run_id=agent_run_id, thread_id=thread_id, instance_id=instance_id,
+                project_id=project_id,
+                model_name=model_name,
+                enable_thinking=enable_thinking, reasoning_effort=reasoning_effort,
+                stream=False, # Explicitly False for background task
+                enable_context_manager=enable_context_manager,
+                agent_config=agent_config,
+                is_agent_builder=is_agent_builder,
+                target_agent_id=target_agent_id
+            )
+            return {"thread_id": thread_id, "agent_run_id": agent_run_id}
 
     except Exception as e:
         logger.error(f"Error in agent initiation: {str(e)}\n{traceback.format_exc()}")

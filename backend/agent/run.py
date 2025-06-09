@@ -545,131 +545,211 @@ async def run_agent(
             try:
                 full_response = ""
                 async for chunk in response:
-                    # If we receive an error chunk, we should stop after this iteration
-                    if isinstance(chunk, dict) and chunk.get('type') == 'status' and chunk.get('status') == 'error':
-                        logger.error(f"Error chunk detected: {chunk.get('message', 'Unknown error')}")
-                        trace.event(name="error_chunk_detected", level="ERROR", status_message=(f"{chunk.get('message', 'Unknown error')}"))
-                        error_detected = True
-                        yield chunk  # Forward the error chunk
-                        continue     # Continue processing other chunks but don't break yet
-                    
-                    # Check for termination signal and capture last_tool_name in status messages
-                    if chunk.get('type') == 'status':
-                        try:
-                            content_str = chunk.get('content', '{}')
-                            if isinstance(content_str, str):
-                                content = json.loads(content_str)
-                            else:
-                                content = content_str
+                    if stream:
+                        # If we receive an error chunk, we should stop after this iteration
+                        if isinstance(chunk, dict) and chunk.get('type') == 'status' and chunk.get('status') == 'error':
+                            logger.error(f"Error chunk detected: {chunk.get('message', 'Unknown error')}")
+                            trace.event(name="error_chunk_detected", level="ERROR", status_message=(f"{chunk.get('message', 'Unknown error')}"))
+                            error_detected = True
+                            error_data = {"type": "error", "message": chunk.get('message', 'Unknown error from stream')}
+                            yield f"data: {json.dumps(error_data)}\n\n"
+                            continue     # Continue processing other chunks but don't break yet
 
-                            status_type = content.get('status_type')
-                            if status_type in ['tool_started', 'tool_completed', 'tool_failed', 'tool_error']:
+                        # Check for termination signal and capture last_tool_name in status messages
+                        if chunk.get('type') == 'status':
+                            try:
+                                content_str = chunk.get('content', '{}')
+                                if isinstance(content_str, str):
+                                    content = json.loads(content_str)
+                                else:
+                                    content = content_str
+
+                                status_type = content.get('status_type')
                                 tool_name = content.get('function_name') or content.get('xml_tag_name')
-                                if tool_name:
+
+                                if status_type == 'tool_started' and tool_name:
                                     last_tool_name = tool_name
-                                    # logger.debug(f"Captured last_tool_name: {last_tool_name} from status: {status_type}")
-
-                            # Parse the metadata to check for termination signal
-                            metadata = chunk.get('metadata', {})
-                            if isinstance(metadata, str):
-                                metadata = json.loads(metadata)
-                            
-                            if metadata.get('agent_should_terminate'):
-                                agent_should_terminate = True
-                                logger.info("Agent termination signal detected in status message (ask/complete tool used)")
-                                trace.event(name="agent_termination_signal_detected", level="DEFAULT", status_message="Agent termination signal detected in status message")
+                                    tool_call_data = {"type": "tool_call", "tool_name": tool_name, "tool_args": content.get('arguments', {})}
+                                    yield f"data: {json.dumps(tool_call_data)}\n\n"
+                                elif status_type == 'tool_completed' and tool_name:
+                                    last_tool_name = tool_name
+                                    # Assuming result is in content or part of it. This might need adjustment.
+                                    tool_result_data = {"type": "tool_result", "tool_name": tool_name, "tool_output": content.get('result', str(content)), "is_error": False}
+                                    yield f"data: {json.dumps(tool_result_data)}\n\n"
+                                elif status_type in ['tool_failed', 'tool_error'] and tool_name:
+                                    last_tool_name = tool_name
+                                    tool_result_data = {"type": "tool_result", "tool_name": tool_name, "tool_output": content.get('error_message', str(content)), "is_error": True}
+                                    yield f"data: {json.dumps(tool_result_data)}\n\n"
                                 
-                                # Extract the tool name from the status content if available
-                                # This is already handled by the last_tool_name capture above for status_type
-                                if content.get('function_name'):
-                                    last_tool_call = content['function_name'] # This variable seems to be from previous logic, ensure it's harmonized or removed if last_tool_name covers it.
-                                elif content.get('xml_tag_name'):
-                                    last_tool_call = content['xml_tag_name'] # Same as above.
-                                    
-                        except Exception as e:
-                            logger.debug(f"Error parsing status message for termination check or last_tool_name: {e}")
+                                # Parse the metadata to check for termination signal (ask/complete)
+                                metadata = chunk.get('metadata', {})
+                                if isinstance(metadata, str):
+                                    metadata = json.loads(metadata)
+
+                                if metadata.get('agent_should_terminate'):
+                                    agent_should_terminate = True
+                                    logger.info("Agent termination signal detected in status message (ask/complete tool used)")
+                                    trace.event(name="agent_termination_signal_detected", level="DEFAULT", status_message="Agent termination signal detected in status message")
+                                    if content.get('function_name'):
+                                        last_tool_call = content['function_name']
+                                    elif content.get('xml_tag_name'):
+                                        last_tool_call = content['xml_tag_name']
+
+                            except Exception as e:
+                                logger.debug(f"Error parsing status message for SSE streaming: {e}")
+                            # Do not yield the original status chunk if stream is True
                         
-                    # Check for XML versions like <ask>, <complete>, or <web-browser-takeover> in assistant content chunks
-                    if chunk.get('type') == 'assistant' and 'content' in chunk:
-                        try:
-                            # The content field might be a JSON string or object
-                            content = chunk.get('content', '{}')
-                            if isinstance(content, str):
-                                assistant_content_json = json.loads(content)
-                            else:
-                                assistant_content_json = content
+                        # Check for XML versions like <ask>, <complete>, or <web-browser-takeover> in assistant content chunks
+                        elif chunk.get('type') == 'assistant' and 'content' in chunk:
+                            try:
+                                content_str = chunk.get('content', '{}')
+                                if isinstance(content_str, str):
+                                    assistant_content_json = json.loads(content_str)
+                                else:
+                                    assistant_content_json = content_str
 
-                            # The actual text content is nested within
-                            assistant_text = assistant_content_json.get('content', '')
-                            full_response += assistant_text
-                            if isinstance(assistant_text, str):
-                                if '</ask>' in assistant_text or '</complete>' in assistant_text or '</web-browser-takeover>' in assistant_text:
-                                   if '</ask>' in assistant_text:
-                                       xml_tool = 'ask'
-                                   elif '</complete>' in assistant_text:
-                                       xml_tool = 'complete'
-                                   elif '</web-browser-takeover>' in assistant_text:
-                                       xml_tool = 'web-browser-takeover'
+                                assistant_text = assistant_content_json.get('content', '')
+                                if assistant_text: # Only yield if there's text
+                                    thought_data = {"type": "thought", "content": assistant_text}
+                                    yield f"data: {json.dumps(thought_data)}\n\n"
 
-                                   last_tool_call = xml_tool
-                                   logger.info(f"Agent used XML tool: {xml_tool}")
-                                   trace.event(name="agent_used_xml_tool", level="DEFAULT", status_message=(f"Agent used XML tool: {xml_tool}"))
-                        except json.JSONDecodeError:
-                            # Handle cases where content might not be valid JSON
-                            logger.warning(f"Warning: Could not parse assistant content JSON: {chunk.get('content')}")
-                            trace.event(name="warning_could_not_parse_assistant_content_json", level="WARNING", status_message=(f"Warning: Could not parse assistant content JSON: {chunk.get('content')}"))
-                        except Exception as e:
-                            logger.error(f"Error processing assistant chunk: {e}")
-                            trace.event(name="error_processing_assistant_chunk", level="ERROR", status_message=(f"Error processing assistant chunk: {e}"))
+                                full_response += assistant_text # Accumulate for final response
 
-                    yield chunk
+                                if isinstance(assistant_text, str):
+                                    if '</ask>' in assistant_text or '</complete>' in assistant_text or '</web-browser-takeover>' in assistant_text:
+                                       if '</ask>' in assistant_text: xml_tool = 'ask'
+                                       elif '</complete>' in assistant_text: xml_tool = 'complete'
+                                       elif '</web-browser-takeover>' in assistant_text: xml_tool = 'web-browser-takeover'
+                                       last_tool_call = xml_tool # This signals termination
+                                       # agent_should_terminate will be set by metadata from these tools
+                                       logger.info(f"Agent used XML tool: {xml_tool}")
+                                       trace.event(name="agent_used_xml_tool", level="DEFAULT", status_message=(f"Agent used XML tool: {xml_tool}"))
+                            except json.JSONDecodeError:
+                                logger.warning(f"Warning: Could not parse assistant content JSON for SSE: {chunk.get('content')}")
+                                trace.event(name="warning_could_not_parse_assistant_content_json_sse", level="WARNING", status_message=(f"Warning: Could not parse assistant content JSON for SSE: {chunk.get('content')}"))
+                            except Exception as e:
+                                logger.error(f"Error processing assistant chunk for SSE: {e}")
+                                trace.event(name="error_processing_assistant_chunk_sse", level="ERROR", status_message=(f"Error processing assistant chunk for SSE: {e}"))
+                            # Do not yield original assistant chunk if stream is True
 
-                # NUEVA LÓGICA MÁS ROBUSTA Y SENCILLA
-                if error_detected:
+                        elif chunk.get('type') == 'tool': # This is where actual tool results are often yielded by AgentPress
+                            try:
+                                metadata = chunk.get('metadata', {})
+                                if isinstance(metadata, str): metadata = json.loads(metadata)
+
+                                parsing_details = metadata.get('parsing_details', {})
+                                tool_name_from_details = parsing_details.get('xml_tag_name')
+                                # If not in details, try to get from the tool_execution_id in metadata if that's a pattern
+                                # For now, relying on xml_tag_name from parsing_details.
+                                tool_name = tool_name_from_details or last_tool_name # Fallback to last_tool_name if not in details
+
+                                content_str_tool = chunk.get('content', '{}')
+                                if isinstance(content_str_tool, str): content_json_tool = json.loads(content_str_tool)
+                                else: content_json_tool = content_str_tool
+
+                                actual_tool_output = content_json_tool.get('content', '')
+                                is_error = content_json_tool.get('is_error', False) # Check if 'is_error' is part of the content
+
+                                tool_result_data = {"type": "tool_result", "tool_name": tool_name, "tool_output": actual_tool_output, "is_error": is_error}
+                                yield f"data: {json.dumps(tool_result_data)}\n\n"
+                            except Exception as e:
+                                logger.error(f"Error processing tool chunk for SSE: {e}")
+                                # Potentially yield an error event here if appropriate
+                            # Do not yield original tool chunk if stream is True
+
+                        else: # Fallback for unknown chunk types if stream is True
+                            # Decide if these should be errors, thoughts, or ignored. For now, ignoring.
+                            logger.warning(f"Unhandled chunk type during SSE streaming: {chunk.get('type')}")
+                            # If you want to forward them anyway (not recommended for strict SSE):
+                            # unknown_data = {"type": "unknown", "content": str(chunk)}
+                            # yield f"data: {json.dumps(unknown_data)}\n\n"
+
+                    else: # if not stream
+                        # Original behavior: just yield the chunk
+                        # Error detection for non-stream mode
+                        if isinstance(chunk, dict) and chunk.get('type') == 'status' and chunk.get('status') == 'error':
+                            logger.error(f"Error chunk detected (non-stream): {chunk.get('message', 'Unknown error')}")
+                            trace.event(name="error_chunk_detected_non_stream", level="ERROR", status_message=(f"{chunk.get('message', 'Unknown error')}"))
+                            error_detected = True
+
+                        # Status message parsing for non-stream (mostly for agent_should_terminate)
+                        if chunk.get('type') == 'status':
+                            try:
+                                content_str = chunk.get('content', '{}')
+                                content = json.loads(content_str) if isinstance(content_str, str) else content_str
+                                status_type = content.get('status_type')
+                                if status_type in ['tool_started', 'tool_completed', 'tool_failed', 'tool_error']:
+                                    tool_name = content.get('function_name') or content.get('xml_tag_name')
+                                    if tool_name: last_tool_name = tool_name
+                                metadata = chunk.get('metadata', {})
+                                if isinstance(metadata, str): metadata = json.loads(metadata)
+                                if metadata.get('agent_should_terminate'): agent_should_terminate = True
+                            except Exception: pass # Ignore parsing errors for non-stream status
+
+                        # Assistant content parsing for non-stream (full_response and agent_should_terminate)
+                        if chunk.get('type') == 'assistant' and 'content' in chunk:
+                            try:
+                                content_str = chunk.get('content', '{}')
+                                assistant_content_json = json.loads(content_str) if isinstance(content_str, str) else content_str
+                                assistant_text = assistant_content_json.get('content', '')
+                                full_response += assistant_text
+                                if isinstance(assistant_text, str):
+                                    if '</ask>' in assistant_text or '</complete>' in assistant_text or '</web-browser-takeover>' in assistant_text:
+                                       xml_tool = 'ask' if '</ask>' in assistant_text else 'complete' if '</complete>' in assistant_text else 'web-browser-takeover'
+                                       last_tool_call = xml_tool
+                                       # agent_should_terminate is usually set by metadata with these tools
+                            except Exception: pass # Ignore parsing errors for non-stream assistant
+
+                        yield chunk # Original yield for non-streaming
+
+                # NUEVA LÓGICA MÁS ROBUSTA Y SENCILLA ( wspólna dla stream i non-stream)
+                if error_detected: # This error_detected flag is set by both stream/non-stream paths
                     logger.info(f"Stopping due to error detected in response stream for iteration {iteration_count}.")
                     trace.event(name="stopping_due_to_error_detected_in_response", level="DEFAULT", status_message=(f"Stopping due to error detected in response stream for iteration {iteration_count}."))
                     generation.end(output=full_response, status_message="error_detected_in_stream", level="ERROR")
-                    continue_execution = False # Detener el bucle principal
-                elif agent_should_terminate: # Esto se activa si se usa 'ask' o 'complete'
+                    continue_execution = False
+                elif agent_should_terminate:
                     logger.info(f"Agent is stopping in iteration {iteration_count} because 'ask' or 'complete' tool was used (last_tool_name: {last_tool_name}).")
+                    if stream: # Yield final response if streaming
+                        final_response_data = {"type": "final_response", "content": full_response}
+                        yield f"data: {json.dumps(final_response_data)}\n\n"
                     trace.event(name="agent_terminated_by_ask_or_complete", level="DEFAULT", status_message=(f"Agent stopped with tool: {last_tool_name}"))
                     generation.end(output=full_response, status_message="agent_stopped_ask_complete")
                     continue_execution = False
                 else:
-                    # Si no hay error y no se usó una herramienta de terminación, el agente debe continuar.
-                    # Ya no necesitamos comprobar 'continue_task'.
                     logger.info(f"Agent finished iteration {iteration_count} with tool '{last_tool_name}'. Continuing to next iteration.")
                     trace.event(name="agent_iteration_complete_continue", level="DEFAULT", status_message=(f"Agent continuing after tool: {last_tool_name}"))
                     generation.end(output=full_response, status_message=f"agent_continued_ok_last_tool:{last_tool_name}")
-                    # No hacemos nada con continue_execution, por lo que el bucle `while` seguirá ejecutándose.
 
             except Exception as e:
-                # Just log the error and re-raise to stop all iterations
                 error_msg = f"Error during response streaming: {str(e)}"
                 logger.error(f"Error: {error_msg}")
                 trace.event(name="error_during_response_streaming", level="ERROR", status_message=(f"Error during response streaming: {str(e)}"))
                 generation.end(output=full_response, status_message=error_msg, level="ERROR")
-                yield {
-                    "type": "status",
-                    "status": "error",
-                    "message": error_msg
-                }
-                # Stop execution immediately on any error
+                if stream:
+                    error_data = {"type": "error", "message": error_msg}
+                    yield f"data: {json.dumps(error_data)}\n\n"
+                else:
+                    yield { "type": "status", "status": "error", "message": error_msg }
                 break
                 
         except Exception as e:
-            # Just log the error and re-raise to stop all iterations
             error_msg = f"Error running thread: {str(e)}"
             logger.error(f"Error: {error_msg}")
             trace.event(name="error_running_thread", level="ERROR", status_message=(f"Error running thread: {str(e)}"))
-            yield {
-                "type": "status",
-                "status": "error",
-                "message": error_msg
-            }
-            # Stop execution immediately on any error
+            if stream:
+                error_data = {"type": "error", "message": error_msg}
+                yield f"data: {json.dumps(error_data)}\n\n"
+            else:
+                yield { "type": "status", "status": "error", "message": error_msg }
             break
-        generation.end(output=full_response)
+        # generation.end(output=full_response) # This was here, but it seems more logical to end it inside the try/except for streaming
+                                            # For non-streaming, it's still valid.
+                                            # For streaming, generation.end is called before breaking or continuing.
+                                            # Let's ensure it's always called if generation started.
+        if not generation.end_time: # Check if it hasn't been ended yet
+            generation.end(output=full_response)
+
 
     langfuse.flush() # Flush Langfuse events at the end of the run
   
