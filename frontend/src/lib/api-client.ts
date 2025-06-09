@@ -1,9 +1,10 @@
 import { createClient } from './supabase/client';
 
-// Initialize Supabase client internally
+// Initialize Supabase client internally - NOT USED BY supabaseClient.execute
 const supabase = createClient();
 const API_PREFIX = process.env.NEXT_PUBLIC_API_PREFIX || '/api';
 
+// ---- Interfaces for initiateAndStreamAgent ----
 export interface InitiateAgentPayload {
 	prompt: string;
 	model_name?: string;
@@ -35,6 +36,7 @@ export interface StreamHandlers {
 	onClose?: () => void;
 }
 
+// ---- initiateAndStreamAgent function ----
 export function initiateAndStreamAgent(
 	payload: InitiateAgentPayload,
 	handlers: StreamHandlers
@@ -42,10 +44,10 @@ export function initiateAndStreamAgent(
 	const abortController = new AbortController();
 	const { signal } = abortController;
 
-	const execute = async () => {
+	const executeStream = async () => { // Renamed from execute to avoid conflict if any
 		console.log('Executing initiateAndStreamAgent');
 		try {
-			const sessionResponse = await supabase.auth.getSession();
+			const sessionResponse = await supabase.auth.getSession(); // Uses the local supabase instance
 			const token = sessionResponse?.data?.session?.access_token;
 
 			if (!token) {
@@ -163,7 +165,7 @@ export function initiateAndStreamAgent(
 		}
 	};
 
-	execute();
+	executeStream();
 
 	return {
 		close: () => {
@@ -172,18 +174,18 @@ export function initiateAndStreamAgent(
 	};
 }
 
-// Standard API Response Structure
+// ---- Standard API Response Structure for backendApi ----
 export interface ApiResponse<T> {
     data: T | null;
     error: Error | null;
     success: boolean;
 }
 
-// backendApi Implementation
+// ---- backendApi Implementation ----
 export const backendApi = {
     get: async <T>(path: string): Promise<ApiResponse<T>> => {
         try {
-            const sessionResponse = await supabase.auth.getSession();
+            const sessionResponse = await supabase.auth.getSession(); // Uses the local supabase instance
             const token = sessionResponse?.data?.session?.access_token;
 
             const headers: HeadersInit = {
@@ -193,7 +195,7 @@ export const backendApi = {
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const response = await fetch(`${API_PREFIX}${path}`, { // Ensure path starts with / or handle concatenation better
+            const response = await fetch(`${API_PREFIX}${path}`, {
                 method: 'GET',
                 headers,
             });
@@ -203,7 +205,6 @@ export const backendApi = {
                 return { data: null, error: new Error(errorText || `HTTP error ${response.status}`), success: false };
             }
 
-            // Handle 204 No Content or other cases where response.json() might fail
             if (response.status === 204 || response.headers.get('content-length') === '0') {
                 return { data: null, error: null, success: true };
             }
@@ -217,7 +218,7 @@ export const backendApi = {
 
     post: async <T>(path: string, body: any): Promise<ApiResponse<T>> => {
         try {
-            const sessionResponse = await supabase.auth.getSession();
+            const sessionResponse = await supabase.auth.getSession(); // Uses the local supabase instance
             const token = sessionResponse?.data?.session?.access_token;
 
             const headers: HeadersInit = {
@@ -227,7 +228,7 @@ export const backendApi = {
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const response = await fetch(`${API_PREFIX}${path}`, { // Ensure path starts with /
+            const response = await fetch(`${API_PREFIX}${path}`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(body),
@@ -239,23 +240,86 @@ export const backendApi = {
             }
 
             if (response.status === 204 || response.headers.get('content-length') === '0') {
-                return { data: null, error: null, success: true }; // Or T could be null for 204
+                return { data: null, error: null, success: true };
             }
 
-            // Only parse JSON if there's content
             const contentType = response.headers.get("content-type");
             if (contentType && contentType.indexOf("application/json") !== -1) {
                 const responseData: T = await response.json();
                 return { data: responseData, error: null, success: true };
             } else {
-                // Handle non-JSON responses, like plain text, if necessary
-                // For now, assuming successful non-JSON, non-204 responses are treated as successful with null data
-                // Or you could try response.text() and cast if T is string
                 return { data: null, error: null, success: true };
             }
 
         } catch (error) {
             return { data: null, error: error instanceof Error ? error : new Error(String(error)), success: false };
+        }
+    },
+};
+
+// ---- supabaseClient.execute wrapper ----
+
+export interface ExecuteContext {
+    operation: string;
+    resource?: string;
+    showErrors?: boolean; // Not directly used by this execute, but could be by a global error handler
+    silent?: boolean;
+}
+
+export interface ExecuteResponse<T> {
+    data: T | null;
+    error: Error | null;
+    success: boolean;
+    status?: number;
+    originalError?: any;
+}
+
+export const supabaseClient = {
+    execute: async <T>(
+        asyncFn: () => Promise<{ data: T | null; error: any }>,
+        context?: ExecuteContext
+    ): Promise<ExecuteResponse<T>> => {
+        const operation = context?.operation || 'Unknown operation';
+        const resource = context?.resource || 'N/A';
+        const silent = context?.silent || false;
+
+        if (!silent) {
+            console.log(`[DB Operation: ${operation}] Starting for resource: ${resource}`);
+        }
+
+        try {
+            const result = await asyncFn();
+
+            if (result.error) {
+                let errorMessage = `Error in ${operation} for resource ${resource}: ${result.error.message || 'Unknown error'}`;
+                if (result.error.details) errorMessage += ` Details: ${result.error.details}`;
+                if (result.error.hint) errorMessage += ` Hint: ${result.error.hint}`;
+                if (result.error.code) errorMessage += ` Code: ${result.error.code}`;
+
+                if (!silent) {
+                    console.error(`[DB Operation: ${operation}] Failed for resource ${resource}:`, errorMessage, result.error);
+                }
+
+                return {
+                    data: null,
+                    error: new Error(errorMessage),
+                    success: false,
+                    originalError: result.error,
+                    status: result.error.status || (result.error.code ? parseInt(result.error.code, 10) : undefined) || undefined,
+                };
+            }
+
+            if (!silent) {
+                console.log(`[DB Operation: ${operation}] Succeeded for resource: ${resource}`);
+            }
+            return { data: result.data, error: null, success: true };
+
+        } catch (e) {
+            const caughtError = e instanceof Error ? e : new Error(String(e));
+            if (!silent) {
+                console.error(`[DB Operation: ${operation}] Exception for resource ${resource}:`, caughtError);
+            }
+            return { data: null, error: caughtError, success: false };
         }
     },
 };

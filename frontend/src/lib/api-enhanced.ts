@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/client';
-import { backendApi } from './api-client'; // supabaseClient removed from import
+import { backendApi, supabaseClient } from './api-client'; // supabaseClient re-added to import
 import { handleApiSuccess } from './error-handler';
 import { 
   Project, 
