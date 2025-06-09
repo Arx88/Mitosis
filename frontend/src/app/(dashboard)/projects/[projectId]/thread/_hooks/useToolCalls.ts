@@ -371,17 +371,30 @@ export function useToolCalls(
       });
 
       // If agent is running and user hasn't manually navigated, show the latest tool
-      if (!userNavigatedRef.current) {
-        setCurrentToolIndex(prev => {
-          const newLength = toolCalls.length + 1; // Account for the new tool being added
-          return newLength - 1;
-        });
-      }
-      
+      // This will be set based on the updated toolCalls array length in the useEffect below.
+      // For now, just ensure the panel is open.
       setIsSidePanelOpen(true);
     },
-    [toolCalls.length],
+    // Dependencies: setToolCalls and setIsSidePanelOpen are stable.
+    // userNavigatedRef is a ref, stable.
+    // We need toolCalls to be part of dependency if we read from it to decide how to update,
+    // but here we are primarily setting state based on the incoming toolCall.
+    // The main effect that re-evaluates currentIndex based on toolCalls is separate.
+    [setToolCalls, setIsSidePanelOpen],
   );
+
+  // Effect to update currentToolIndex when toolCalls array changes (e.g., a streaming tool is added)
+  // and user hasn't manually navigated.
+  useEffect(() => {
+    if (toolCalls.length > 0 && !userNavigatedRef.current) {
+      // Check if the last tool call is streaming (this indicates an active agent run)
+      const lastToolCall = toolCalls[toolCalls.length - 1];
+      if (lastToolCall.toolResult?.content === 'STREAMING' || agentStatus === 'running') {
+         setCurrentToolIndex(toolCalls.length - 1);
+      }
+    }
+  }, [toolCalls, agentStatus]); // Removed userNavigatedRef from here as it's a ref and doesn't trigger effect,
+                               // but its value is used correctly inside. Re-added agentStatus.
 
   return {
     toolCalls,
