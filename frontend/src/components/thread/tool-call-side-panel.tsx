@@ -181,6 +181,12 @@ export function ToolCallSidePanel({
   const displayIndex = safeInternalIndex; // Index within toolCallSnapshots
   const displayTotalCalls = totalCalls;   // Total number of snapshots (completed or streaming)
 
+  const completedToolCalls = toolCallSnapshots.filter(snapshot =>
+    snapshot.toolCall.toolResult?.content &&
+    snapshot.toolCall.toolResult.content !== 'STREAMING'
+  );
+  const totalCompletedCalls = completedToolCalls.length;
+
   const currentToolNameFromSnapshot = displayToolCall?.assistantCall?.name || 'Tool Call';
   const CurrentToolIcon = getToolIcon(currentToolNameFromSnapshot);
   const isStreaming = displayToolCall?.toolResult?.content === 'STREAMING';
