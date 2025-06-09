@@ -117,8 +117,6 @@ export function ToolViewWrapper({
 }: ToolViewWrapperProps) {
   const toolTitle = getToolTitle(name);
   const Icon = getToolIcon(name); // Main icon for the tool
-  const toolTitle = getToolTitle(name);
-  const Icon = getToolIcon(name);
   const MotionDiv = motion.div;
   const wrapperControls = useAnimation();
 
