@@ -1,243 +1,191 @@
-import { createClient } from '@/lib/supabase/client';
-import { handleApiError, handleNetworkError, ErrorContext, ApiError } from './error-handler';
+import { supabase } from '$lib/supabaseClient';
+import { PUBLIC_API_PREFIX } from '$env/static/public';
 
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+const API_PREFIX = PUBLIC_API_PREFIX || '/api';
 
-export interface ApiClientOptions {
-  showErrors?: boolean;
-  errorContext?: ErrorContext;
-  timeout?: number;
+export interface InitiateAgentPayload {
+	prompt: string;
+	model_name?: string;
+	enable_thinking?: boolean;
+	reasoning_effort?: string;
+	enable_context_manager?: boolean;
+	agent_id?: string;
+	files?: FileList | File[]; // Accept FileList or File[]
+	is_agent_builder?: boolean;
+	target_agent_id?: string;
 }
 
-export interface ApiResponse<T = any> {
-  data?: T;
-  error?: ApiError;
-  success: boolean;
+export type StreamEventType = 'thought' | 'tool_call' | 'tool_result' | 'final_response' | 'error';
+
+export interface StreamEvent {
+	type: StreamEventType;
+	content?: any;
+	tool_name?: string;
+	tool_args?: Record<string, any>;
+	tool_output?: any;
+	is_error?: boolean;
+	message?: string;
 }
 
-export const apiClient = {
-  async request<T = any>(
-    url: string,
-    options: RequestInit & ApiClientOptions = {}
-  ): Promise<ApiResponse<T>> {
-    const {
-      showErrors = true,
-      errorContext,
-      timeout = 30000,
-      ...fetchOptions
-    } = options;
+export interface StreamHandlers {
+	onOpen?: () => void;
+	onMessage: (event: StreamEvent) => void;
+	onError?: (error: Error) => void;
+	onClose?: () => void;
+}
 
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeout);
+export function initiateAndStreamAgent(
+	payload: InitiateAgentPayload,
+	handlers: StreamHandlers
+): { close: () => void } {
+	const abortController = new AbortController();
+	const { signal } = abortController;
 
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
+	const execute = async () => {
+		console.log('Executing initiateAndStreamAgent'); // Added log
+		try {
+			const session = await supabase.auth.getSession();
+			const token = session?.data?.session?.access_token;
 
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...fetchOptions.headers as Record<string, string>,
-      };
+			if (!token) {
+				throw new Error('Authentication token not available.');
+			}
 
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
+			const formData = new FormData();
+			formData.append('prompt', payload.prompt);
+			formData.append('stream', 'true');
 
-      const response = await fetch(url, {
-        ...fetchOptions,
-        headers,
-        signal: controller.signal,
-      });
+			if (payload.model_name) formData.append('model_name', payload.model_name);
+			if (payload.enable_thinking !== undefined)
+				formData.append('enable_thinking', String(payload.enable_thinking));
+			if (payload.reasoning_effort)
+				formData.append('reasoning_effort', payload.reasoning_effort);
+			if (payload.enable_context_manager !== undefined)
+				formData.append('enable_context_manager', String(payload.enable_context_manager));
+			if (payload.agent_id) formData.append('agent_id', payload.agent_id);
+			if (payload.is_agent_builder !== undefined)
+				formData.append('is_agent_builder', String(payload.is_agent_builder));
+			if (payload.target_agent_id)
+				formData.append('target_agent_id', payload.target_agent_id);
 
-      clearTimeout(timeoutId);
+			if (payload.files) {
+                // Ensure payload.files is an array before iterating
+                const filesArray = Array.isArray(payload.files) ? payload.files : Array.from(payload.files);
+				for (const file of filesArray) {
+					formData.append('files', file);
+				}
+			}
 
-      if (!response.ok) {
-        const error: ApiError = new Error(`HTTP ${response.status}: ${response.statusText}`);
-        error.status = response.status;
-        error.response = response;
+			const response = await fetch(`${API_PREFIX}/agent/initiate`, {
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${token}`
+				},
+				body: formData,
+				signal
+			});
 
-        try {
-          const errorData = await response.json();
-          error.details = errorData;
-          if (errorData.message) {
-            error.message = errorData.message;
-          }
-        } catch {
-        }
+			if (!response.ok) {
+				const errorBody = await response.json().catch(() => ({ detail: response.statusText }));
+				throw new Error(
+					`HTTP error ${response.status}: ${errorBody.detail || 'Failed to start agent'}`
+				);
+			}
 
-        if (showErrors) {
-          handleApiError(error, errorContext);
-        }
+			if (handlers.onOpen) {
+				handlers.onOpen();
+			}
 
-        return {
-          error,
-          success: false,
-        };
-      }
+			if (!response.body) {
+				throw new Error('Response body is null');
+			}
 
-      let data: T;
-      const contentType = response.headers.get('content-type');
-      
-      if (contentType?.includes('application/json')) {
-        data = await response.json();
-      } else if (contentType?.includes('text/')) {
-        data = await response.text() as T;
-      } else {
-        data = await response.blob() as T;
-      }
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = '';
 
-      return {
-        data,
-        success: true,
-      };
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) {
+					// Process any remaining data in the buffer when the stream is done
+					if (buffer.startsWith('data: ')) {
+						const jsonString = buffer.substring('data: '.length).trim();
+						if (jsonString) { // Ensure there's content after "data: "
+							try {
+								const eventData = JSON.parse(jsonString);
+								handlers.onMessage(eventData as StreamEvent);
+							} catch (e) {
+								console.error('Failed to parse final SSE event data fragment:', jsonString, e);
+								if (handlers.onError) {
+									handlers.onError(new Error(`Failed to parse final SSE event fragment: ${jsonString}`));
+								}
+							}
+						}
+					} else if (buffer.trim()) { // If it's not empty and doesn't start with "data: "
+						console.warn('Received non-SSE data at stream end:', buffer);
+					}
+					break;
+				}
 
-    } catch (error: any) {
-      const apiError: ApiError = error instanceof Error ? error : new Error(String(error));
-      
-      if (error.name === 'AbortError') {
-        apiError.message = 'Request timeout';
-        apiError.code = 'TIMEOUT';
-      }
+				buffer += decoder.decode(value, { stream: true });
+				const messages = buffer.split('\n\n');
 
-      if (showErrors) {
-        handleNetworkError(apiError, errorContext);
-      }
+				// The last part of the split is potentially an incomplete message, so keep it in buffer.
+				// All other parts are complete messages.
+				buffer = messages.pop() || '';
 
-      return {
-        error: apiError,
-        success: false,
-      };
-    }
-  },
+				for (const msg of messages) {
+					if (msg.startsWith('data: ')) {
+						const jsonString = msg.substring('data: '.length);
+						try {
+							const eventData = JSON.parse(jsonString);
+							handlers.onMessage(eventData as StreamEvent);
+						} catch (e) {
+							console.error('Failed to parse SSE event data:', jsonString, e);
+							if (handlers.onError) {
+								handlers.onError(new Error(`Failed to parse SSE event: ${jsonString}`));
+							}
+						}
+					} else if (msg.trim()) { // Log if we receive a non-empty message not starting with "data: "
+                        console.warn('Received message not in SSE format:', msg);
+                    }
+				}
+			}
+		} catch (error) {
+			if (signal.aborted) {
+				console.log('Stream aborted by client.');
+			} else if (handlers.onError) {
+				handlers.onError(error instanceof Error ? error : new Error(String(error)));
+			} else {
+				console.error('Unhandled stream error:', error);
+			}
+		} finally {
+			if (handlers.onClose) {
+				handlers.onClose();
+			}
+		}
+	};
 
-  get: async <T = any>(
-    url: string,
-    options: Omit<RequestInit & ApiClientOptions, 'method' | 'body'> = {}
-  ): Promise<ApiResponse<T>> => {
-    return apiClient.request<T>(url, {
-      ...options,
-      method: 'GET',
-    });
-  },
+	execute();
 
-  post: async <T = any>(
-    url: string,
-    data?: any,
-    options: Omit<RequestInit & ApiClientOptions, 'method'> = {}
-  ): Promise<ApiResponse<T>> => {
-    return apiClient.request<T>(url, {
-      ...options,
-      method: 'POST',
-      body: data ? JSON.stringify(data) : undefined,
-    });
-  },
+	return {
+		close: () => {
+			abortController.abort();
+		}
+	};
+}
 
-  put: async <T = any>(
-    url: string,
-    data?: any,
-    options: Omit<RequestInit & ApiClientOptions, 'method'> = {}
-  ): Promise<ApiResponse<T>> => {
-    return apiClient.request<T>(url, {
-      ...options,
-      method: 'PUT',
-      body: data ? JSON.stringify(data) : undefined,
-    });
-  },
+// Example of how to use other API functions (if any) - placeholder
+export async function getSomeData(): Promise<any> {
+	const session = await supabase.auth.getSession();
+	const token = session?.data?.session?.access_token;
+	if (!token) throw new Error('Not authenticated');
 
-  patch: async <T = any>(
-    url: string,
-    data?: any,
-    options: Omit<RequestInit & ApiClientOptions, 'method'> = {}
-  ): Promise<ApiResponse<T>> => {
-    return apiClient.request<T>(url, {
-      ...options,
-      method: 'PATCH',
-      body: data ? JSON.stringify(data) : undefined,
-    });
-  },
-
-  delete: async <T = any>(
-    url: string,
-    options: Omit<RequestInit & ApiClientOptions, 'method' | 'body'> = {}
-  ): Promise<ApiResponse<T>> => {
-    return apiClient.request<T>(url, {
-      ...options,
-      method: 'DELETE',
-    });
-  },
-
-  upload: async <T = any>(
-    url: string,
-    formData: FormData,
-    options: Omit<RequestInit & ApiClientOptions, 'method' | 'body'> = {}
-  ): Promise<ApiResponse<T>> => {
-    const { headers, ...restOptions } = options;
-    
-    const uploadHeaders = { ...headers as Record<string, string> };
-    delete uploadHeaders['Content-Type'];
-
-    return apiClient.request<T>(url, {
-      ...restOptions,
-      method: 'POST',
-      body: formData,
-      headers: uploadHeaders,
-    });
-  },
-};
-
-export const supabaseClient = {
-  async execute<T = any>(
-    queryFn: () => Promise<{ data: T | null; error: any }>,
-    errorContext?: ErrorContext
-  ): Promise<ApiResponse<T>> {
-    try {
-      const { data, error } = await queryFn();
-
-      if (error) {
-        const apiError: ApiError = new Error(error.message || 'Database error');
-        apiError.code = error.code;
-        apiError.details = error;
-
-        handleApiError(apiError, errorContext);
-
-        return {
-          error: apiError,
-          success: false,
-        };
-      }
-
-      return {
-        data: data as T,
-        success: true,
-      };
-    } catch (error: any) {
-      const apiError: ApiError = error instanceof Error ? error : new Error(String(error));
-      handleApiError(apiError, errorContext);
-
-      return {
-        error: apiError,
-        success: false,
-      };
-    }
-  },
-};
-
-export const backendApi = {
-  get: <T = any>(endpoint: string, options?: Omit<RequestInit & ApiClientOptions, 'method' | 'body'>) =>
-    apiClient.get<T>(`${API_URL}${endpoint}`, options),
-
-  post: <T = any>(endpoint: string, data?: any, options?: Omit<RequestInit & ApiClientOptions, 'method'>) =>
-    apiClient.post<T>(`${API_URL}${endpoint}`, data, options),
-
-  put: <T = any>(endpoint: string, data?: any, options?: Omit<RequestInit & ApiClientOptions, 'method'>) =>
-    apiClient.put<T>(`${API_URL}${endpoint}`, data, options),
-
-  patch: <T = any>(endpoint: string, data?: any, options?: Omit<RequestInit & ApiClientOptions, 'method'>) =>
-    apiClient.patch<T>(`${API_URL}${endpoint}`, data, options),
-
-  delete: <T = any>(endpoint: string, options?: Omit<RequestInit & ApiClientOptions, 'method' | 'body'>) =>
-    apiClient.delete<T>(`${API_URL}${endpoint}`, options),
-
-  upload: <T = any>(endpoint: string, formData: FormData, options?: Omit<RequestInit & ApiClientOptions, 'method' | 'body'>) =>
-    apiClient.upload<T>(`${API_URL}${endpoint}`, formData, options),
-}; 
+	const response = await fetch(`${API_PREFIX}/some-data-route`, {
+		headers: {
+			Authorization: `Bearer ${token}`
+		}
+	});
+	if (!response.ok) throw new Error('Failed to fetch data');
+	return response.json();
+}

@@ -1864,3 +1864,11 @@ export const getAgentBuilderChatHistory = async (agentId: string): Promise<{mess
 
   return data;
 };
+
+// Export stream-related functions and types from api-client
+export {
+    initiateAndStreamAgent,
+    type InitiateAgentPayload,
+    type StreamEvent,
+    type StreamHandlers
+} from './api-client';
