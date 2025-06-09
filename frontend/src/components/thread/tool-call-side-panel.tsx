@@ -1,3 +1,4 @@
+// Cache-busting comment
 'use client';
 
 import { Project } from '@/lib/api';
