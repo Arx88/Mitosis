@@ -168,7 +168,7 @@ export const ThreadContent: React.FC<ThreadContentProps> = ({
                                 displayMessages.forEach((message, index) => {
                                     const messageKey = message.message_id || `msg-${index}`;
                                     // Check for explicit error type or metadata indicating an error
-                                    const isError = message.type === 'error' || (message.metadata && (message.metadata as any).error);
+                                    const isError = !!(message.metadata && (message.metadata as any).error);
 
                                     if (isError) {
                                         if (currentGroup) groupedMessages.push(currentGroup);
