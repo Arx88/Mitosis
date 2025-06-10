@@ -387,12 +387,15 @@ async def run_agent(
         if not can_run:
             error_msg = f"Billing limit reached: {message}"
             trace.event(name="billing_limit_reached", level="ERROR", status_message=(f"{error_msg}"))
-            # Yield a special message to indicate billing limit reached
-            yield {
-                "type": "status",
-                "status": "stopped",
-                "message": error_msg
-            }
+            error_data = {"type": "error", "message": error_msg}
+            if stream:
+                yield error_data
+            else:
+                yield {
+                    "type": "status",
+                    "status": "stopped",
+                    "message": error_msg
+                }
             break
         # Check if last message is from assistant using direct Supabase query
         latest_message = await client.table('messages').select('*').eq('thread_id', thread_id).in_('type', ['assistant', 'tool', 'user']).order('created_at', desc=True).limit(1).execute()
@@ -552,7 +555,7 @@ async def run_agent(
                             trace.event(name="error_chunk_detected", level="ERROR", status_message=(f"{chunk.get('message', 'Unknown error')}"))
                             error_detected = True
                             error_data = {"type": "error", "message": chunk.get('message', 'Unknown error from stream')}
-                            yield f"data: {json.dumps(error_data)}\n\n"
+                            yield error_data
                             continue     # Continue processing other chunks but don't break yet
 
                         # Check for termination signal and capture last_tool_name in status messages
@@ -570,17 +573,16 @@ async def run_agent(
                                 if status_type == 'tool_started' and tool_name:
                                     last_tool_name = tool_name
                                     tool_call_data = {"type": "tool_call", "tool_name": tool_name, "tool_args": content.get('arguments', {})}
-                                    yield f"data: {json.dumps(tool_call_data)}\n\n"
+                                    yield tool_call_data
                                 elif status_type == 'tool_completed' and tool_name:
                                     last_tool_name = tool_name
-                                    # Assuming result is in content or part of it. This might need adjustment.
                                     tool_result_data = {"type": "tool_result", "tool_name": tool_name, "tool_output": content.get('result', str(content)), "is_error": False}
-                                    yield f"data: {json.dumps(tool_result_data)}\n\n"
+                                    yield tool_result_data
                                 elif status_type in ['tool_failed', 'tool_error'] and tool_name:
                                     last_tool_name = tool_name
                                     tool_result_data = {"type": "tool_result", "tool_name": tool_name, "tool_output": content.get('error_message', str(content)), "is_error": True}
-                                    yield f"data: {json.dumps(tool_result_data)}\n\n"
-                                
+                                    yield tool_result_data
+
                                 # Parse the metadata to check for termination signal (ask/complete)
                                 metadata = chunk.get('metadata', {})
                                 if isinstance(metadata, str):
@@ -598,7 +600,7 @@ async def run_agent(
                             except Exception as e:
                                 logger.debug(f"Error parsing status message for SSE streaming: {e}")
                             # Do not yield the original status chunk if stream is True
-                        
+
                         # Check for XML versions like <ask>, <complete>, or <web-browser-takeover> in assistant content chunks
                         elif chunk.get('type') == 'assistant' and 'content' in chunk:
                             try:
@@ -611,7 +613,7 @@ async def run_agent(
                                 assistant_text = assistant_content_json.get('content', '')
                                 if assistant_text: # Only yield if there's text
                                     thought_data = {"type": "thought", "content": assistant_text}
-                                    yield f"data: {json.dumps(thought_data)}\n\n"
+                                    yield thought_data
 
                                 full_response += assistant_text # Accumulate for final response
 
@@ -651,7 +653,7 @@ async def run_agent(
                                 is_error = content_json_tool.get('is_error', False) # Check if 'is_error' is part of the content
 
                                 tool_result_data = {"type": "tool_result", "tool_name": tool_name, "tool_output": actual_tool_output, "is_error": is_error}
-                                yield f"data: {json.dumps(tool_result_data)}\n\n"
+                                yield tool_result_data
                             except Exception as e:
                                 logger.error(f"Error processing tool chunk for SSE: {e}")
                                 # Potentially yield an error event here if appropriate
@@ -712,7 +714,7 @@ async def run_agent(
                     logger.info(f"Agent is stopping in iteration {iteration_count} because 'ask' or 'complete' tool was used (last_tool_name: {last_tool_name}).")
                     if stream: # Yield final response if streaming
                         final_response_data = {"type": "final_response", "content": full_response}
-                        yield f"data: {json.dumps(final_response_data)}\n\n"
+                        yield final_response_data
                     trace.event(name="agent_terminated_by_ask_or_complete", level="DEFAULT", status_message=(f"Agent stopped with tool: {last_tool_name}"))
                     generation.end(output=full_response, status_message="agent_stopped_ask_complete")
                     continue_execution = False
@@ -726,22 +728,22 @@ async def run_agent(
                 logger.error(f"Error: {error_msg}")
                 trace.event(name="error_during_response_streaming", level="ERROR", status_message=(f"Error during response streaming: {str(e)}"))
                 generation.end(output=full_response, status_message=error_msg, level="ERROR")
+                error_data = {"type": "error", "message": error_msg}
                 if stream:
-                    error_data = {"type": "error", "message": error_msg}
-                    yield f"data: {json.dumps(error_data)}\n\n"
+                    yield error_data
                 else:
-                    yield { "type": "status", "status": "error", "message": error_msg }
+                    yield { "type": "status", "status": "error", "message": error_msg } # Keep original format for non-stream
                 break
                 
         except Exception as e:
             error_msg = f"Error running thread: {str(e)}"
             logger.error(f"Error: {error_msg}")
             trace.event(name="error_running_thread", level="ERROR", status_message=(f"Error running thread: {str(e)}"))
+            error_data = {"type": "error", "message": error_msg}
             if stream:
-                error_data = {"type": "error", "message": error_msg}
-                yield f"data: {json.dumps(error_data)}\n\n"
+                yield error_data
             else:
-                yield { "type": "status", "status": "error", "message": error_msg }
+                yield { "type": "status", "status": "error", "message": error_msg } # Keep original format for non-stream
             break
         # generation.end(output=full_response) # This was here, but it seems more logical to end it inside the try/except for streaming
                                             # For non-streaming, it's still valid.
