@@ -329,7 +329,10 @@ export const agentApi = {
         timeout: 60000,
       }
     );
-    return result.data || null;
+    if (result.data && typeof result.data.agent_run_id === 'string') {
+      return result.data;
+    }
+    return null;
   },
 
   async stop(agentRunId: string): Promise<boolean> {
