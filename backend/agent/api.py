@@ -1126,14 +1126,29 @@ async def initiate_agent_with_files(
             logger.warning(f"Failed to register agent run in Redis ({instance_key}): {str(e)}")
 
         if stream:
-            logger.info(f"Streaming agent run {agent_run_id} directly for thread {thread_id}")
-            # Directly call run_agent and return StreamingResponse
-            # run_agent needs to handle its own Langfuse trace and sandbox acquisition via project_id
-            # It also needs to update the agent_runs table status upon completion/failure.
-            event_generator = run_agent(
+            logger.info(f"Streaming agent run {agent_run_id} directly for thread {thread_id} (SSE formatting in API)")
+
+            async def sse_formatted_stream_generator(dict_event_generator):
+                async for event_dict in dict_event_generator:
+                    try:
+                        # Ensure complex objects within event_dict are serializable if necessary,
+                        # though json.dumps should handle common Python dicts/lists/primitives.
+                        yield f"data: {json.dumps(event_dict)}\n\n"
+                    except TypeError as e:
+                        # Log the problematic dictionary and error
+                        logger.error(f"Error serializing event dictionary to JSON: {event_dict} - {e}")
+                        # Yield an error event in SSE format
+                        error_event = {"type": "error", "message": "Error serializing stream data."}
+                        yield f"data: {json.dumps(error_event)}\n\n"
+                    except Exception as e:
+                        logger.error(f"Generic error in SSE formatting generator: {e}")
+                        error_event = {"type": "error", "message": "A server error occurred during streaming."}
+                        yield f"data: {json.dumps(error_event)}\n\n"
+
+            dict_event_generator = run_agent(
                 thread_id=thread_id,
                 project_id=project_id,
-                stream=True, # Explicitly True for run_agent's internal logic
+                stream=True, # run_agent will yield dicts
                 model_name=model_name,
                 enable_thinking=enable_thinking,
                 reasoning_effort=reasoning_effort,
@@ -1141,12 +1156,12 @@ async def initiate_agent_with_files(
                 agent_config=agent_config,
                 is_agent_builder=is_agent_builder,
                 target_agent_id=target_agent_id,
-                # trace=None, # run_agent will create its own if None
-                # agent_run_id=agent_run_id # Pass agent_run_id for status updates within run_agent (TODO: ensure run_agent handles this)
             )
-            # Note: The `agent_run_id` is created, but `run_agent` must be responsible for updating its status in the DB.
-            # If `run_agent` doesn't update the status, it will remain "running".
-            return StreamingResponse(event_generator, media_type="text/event-stream")
+
+            # Wrap the dict generator with the SSE formatting generator
+            sse_generator = sse_formatted_stream_generator(dict_event_generator)
+
+            return StreamingResponse(sse_generator, media_type="text/event-stream")
         else:
             logger.info(f"Dispatching agent run {agent_run_id} to background for thread {thread_id}")
             # Run agent in background (existing logic)
